@@ -1,0 +1,17 @@
+# Backend (Maven)
+backend/target/
+backend/node_modules/
+backend/.classpath
+backend/.project
+backend/.settings/
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+*.iml
+
+# Env / secrets
+.env
+.env.*
+!.env.example

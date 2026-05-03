@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "width": 800,
+  "height": 560,
+  "elements": [
+    { "id": "kn_w_top", "kind": "wall", "x1": 32, "y1": 40, "x2": 768, "y2": 40, "thickness": 6 },
+    { "id": "kn_w_left", "kind": "wall", "x1": 32, "y1": 40, "x2": 32, "y2": 508, "thickness": 6 },
+    { "id": "kn_w_right", "kind": "wall", "x1": 768, "y1": 40, "x2": 768, "y2": 508, "thickness": 6 },
+    { "id": "kn_w_bot_l", "kind": "wall", "x1": 32, "y1": 508, "x2": 300, "y2": 508, "thickness": 6 },
+    { "id": "kn_w_bot_r", "kind": "wall", "x1": 500, "y1": 508, "x2": 768, "y2": 508, "thickness": 6 },
+    { "id": "kn_alley", "kind": "wall", "x1": 120, "y1": 260, "x2": 680, "y2": 260, "thickness": 3 },
+    { "id": "kn_giris", "kind": "entrance", "x": 300, "y": 452, "w": 200, "h": 56 },
+    { "id": "kn_tar_giris", "kind": "tarti", "x": 356, "y": 72, "w": 88, "h": 60 },
+    { "id": "kn_tar_cikis", "kind": "tarti", "x": 356, "y": 388, "w": 88, "h": 60 },
+    {
+      "id": "kn_stall_ahmet",
+      "kind": "stall",
+      "x": 72,
+      "y": 172,
+      "w": 156,
+      "h": 118,
+      "stallCode": "A-12",
+      "vendorId": 1
+    },
+    {
+      "id": "kn_stall_mehmet",
+      "kind": "stall",
+      "x": 572,
+      "y": 196,
+      "w": 156,
+      "h": 118,
+      "stallCode": "B-05",
+      "vendorId": 2
+    }
+  ]
+}

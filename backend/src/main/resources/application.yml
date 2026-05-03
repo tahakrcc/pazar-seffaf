@@ -1,0 +1,81 @@
+spring:
+  application:
+    name: pazar-api
+  profiles:
+    default: dev
+  datasource:
+    url: ${DATABASE_URL:jdbc:h2:mem:pazar;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH}
+    username: ${DATABASE_USER:sa}
+    password: ${DATABASE_PASSWORD:}
+    driver-class-name: ${DATABASE_DRIVER:org.h2.Driver}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+        dialect: ${JPA_DIALECT:org.hibernate.dialect.H2Dialect}
+  flyway:
+    enabled: true
+  servlet:
+    multipart:
+      max-file-size: 15MB
+      max-request-size: 20MB
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+    enabled: ${RABBITMQ_ENABLED:false}
+    listener:
+      simple:
+        auto-startup: ${RABBITMQ_LISTENER_ENABLED:false}
+
+server:
+  port: ${SERVER_PORT:8080}
+  servlet:
+    context-path: /
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      show-details: when_authorized
+
+app:
+  jwt:
+    secret: ${JWT_SECRET:change-me-in-production-use-long-random-secret-key-min-32-chars}
+    expiration-ms: ${JWT_EXPIRATION_MS:86400000}
+  minio:
+    enabled: ${MINIO_ENABLED:false}
+    endpoint: ${MINIO_ENDPOINT:http://127.0.0.1:9000}
+    access-key: ${MINIO_ACCESS_KEY:minio}
+    secret-key: ${MINIO_SECRET_KEY:minio123}
+    bucket: ${MINIO_BUCKET:pazar-evidence}
+  cors:
+    allowed-origins: ${CORS_ORIGINS:http://localhost:5173,http://127.0.0.1:5173}
+  storage:
+    local-dir: ${LOCAL_STORAGE_DIR:./storage}
+  ocr:
+    queue: ${OCR_QUEUE:pazar.ocr.jobs}
+    listener-enabled: ${OCR_LISTENER_ENABLED:false}
+
+springdoc:
+  api-docs:
+    path: /api/v1/docs/openapi
+  swagger-ui:
+    path: /api/v1/docs/swagger-ui
+
+logging:
+  level:
+    root: INFO
+    com.pazarsaffaf: DEBUG
