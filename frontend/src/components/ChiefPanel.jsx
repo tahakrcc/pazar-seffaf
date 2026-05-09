@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
+import { postChiefAssignment } from '../api/pazarApi'
 import {
-  fetchChiefWorkload,
-  fetchChiefOfficers,
-  fetchChiefComplaints,
-  postChiefAssignment,
-} from '../api/pazarApi'
+  STATIC_CHIEF_WORKLOAD,
+  STATIC_OFFICERS,
+  STATIC_COMPLAINTS,
+} from '../data/offlineDataset.js'
 import RolePanelLayout from './layout/RolePanelLayout.jsx'
 import RoleMissionCards from './RoleMissionCards.jsx'
 import RolePanelQuickNav from './RolePanelQuickNav.jsx'
@@ -31,16 +31,11 @@ export default function ChiefPanel({ user, darkMode, setDarkMode }) {
   const [assigningId, setAssigningId] = useState(null)
   const [officerPick, setOfficerPick] = useState({})
 
-  const load = async () => {
+  const load = () => {
     setErr('')
-    try {
-      const [w, o, c] = await Promise.all([fetchChiefWorkload(), fetchChiefOfficers(), fetchChiefComplaints()])
-      setWorkload(w || {})
-      setOfficers(Array.isArray(o) ? o : [])
-      setComplaints(Array.isArray(c) ? c : [])
-    } catch (e) {
-      setErr(String(e.message || e))
-    }
+    setWorkload({ ...STATIC_CHIEF_WORKLOAD })
+    setOfficers(STATIC_OFFICERS.map((o) => ({ ...o })))
+    setComplaints(STATIC_COMPLAINTS.map((c) => ({ ...c })))
   }
 
   useEffect(() => { load() }, [])
@@ -50,12 +45,26 @@ export default function ChiefPanel({ user, darkMode, setDarkMode }) {
     setAssigningId(complaintId)
     try {
       await postChiefAssignment(complaintId, Number(officerUserId))
-      await load()
-    } catch (e) {
-      alert(String(e.message || e))
-    } finally {
-      setAssigningId(null)
+    } catch {
+      /* offline — yerel güncelle */
     }
+    const officer = STATIC_OFFICERS.find((o) => Number(o.id) === Number(officerUserId))
+    setComplaints((prev) => {
+      const next = prev.map((c) =>
+        Number(c.id) === Number(complaintId)
+          ? {
+              ...c,
+              status: 'ASSIGNED',
+              assignedOfficerUserId: Number(officerUserId),
+              assignedOfficerName: officer?.name || '',
+            }
+          : c,
+      )
+      const open = next.filter((c) => ['NEW', 'ASSIGNED', 'IN_PROGRESS'].includes(c.status)).length
+      setWorkload((w) => ({ ...w, openComplaints: open }))
+      return next
+    })
+    setAssigningId(null)
   }
 
   const quickNavItems = chiefTabs.map((t) => ({
@@ -160,7 +169,7 @@ export default function ChiefPanel({ user, darkMode, setDarkMode }) {
       {section === 'ekip' && (
         <section className="chart-card">
           <h3>Zabıta personeli</h3>
-          <p className="muted">Sistemde kayıtlı memurlar (API).</p>
+          <p className="muted">Örnek personel listesi (yalnızca tarayıcıda).</p>
           {officers.length === 0 && <p className="muted">Personel listesi boş veya yüklenemedi.</p>}
           <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
             {officers.map((o) => (

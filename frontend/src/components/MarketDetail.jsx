@@ -3,7 +3,8 @@ import { useParams, useNavigate, useLocation, useSearchParams } from 'react-rout
 import { markets as mockMarkets, DAYS_TR, getMarketPrices, vendors, products as mockProducts, getMarketSchema, getPriceTrend } from '../data/markets'
 import { kernekMarketCanvas } from '../data/kernekCanvasSchema.js'
 import { parseMarketSchemaPayload } from '../utils/schemaCanvas.js'
-import { fetchMarketPrices, fetchMarketLayout, submitComplaint } from '../api/pazarApi'
+import { submitComplaint } from '../api/pazarApi'
+import { getDetailPrices, getMarketLayoutResponse, submitComplaintOffline } from '../data/offlineDataset.js'
 import { getMapsLink, isMarketOpenToday } from '../utils/helpers'
 import { buildCellTypeMap, getWallLineStyle } from '../utils/schemaGrid.js'
 import { getMergedSchemaTools } from '../config/schemaCellTypes.js'
@@ -36,31 +37,11 @@ export default function MarketDetail({ user, addToShopList, shopList, setShopLis
 
   useEffect(() => {
     if (!market) return
-    let cancel = false
-    ;(async () => {
-      try {
-        const [pr, layoutRes] = await Promise.all([fetchMarketPrices(market.id), fetchMarketLayout(market.id)])
-        if (cancel) return
-        setPrices(
-          pr.map((p) => ({
-            ...p,
-            medianPrice: typeof p.medianPrice === 'number' ? String(p.medianPrice) : p.medianPrice,
-            minPrice: Number(p.minPrice),
-            maxPrice: Number(p.maxPrice),
-          }))
-        )
-        const parsedLayout = parseMarketSchemaPayload(layoutRes?.layout)
-        setLayout(parsedLayout?.canvas ? parsedLayout : { canvas: kernekMarketCanvas })
-      } catch {
-        if (!cancel) {
-          setPrices(getMarketPrices(market.id))
-          setLayout({ canvas: kernekMarketCanvas })
-        }
-      }
-    })()
-    return () => {
-      cancel = true
-    }
+    const pr = getDetailPrices(market.id)
+    setPrices(pr)
+    const layoutRes = getMarketLayoutResponse(market.id)
+    const parsedLayout = parseMarketSchemaPayload(layoutRes?.layout)
+    setLayout(parsedLayout?.canvas ? parsedLayout : { canvas: kernekMarketCanvas })
   }, [market])
 
   const [tab, setTab] = useState('schema')
@@ -205,16 +186,20 @@ export default function MarketDetail({ user, addToShopList, shopList, setShopLis
       } catch {
         /* konum isteğe bağlı */
       }
-      await submitComplaint({
-        marketId: market.id,
-        vendorId: cv.id,
-        description: complaintText,
-        latitude,
-        longitude,
-        reporterPhone: complaintPhone.trim(),
-        citizenSessionId: localStorage.getItem('pazar_citizen_session') || undefined,
-        photoFile: complaintPhoto || undefined,
-      })
+      try {
+        await submitComplaint({
+          marketId: market.id,
+          vendorId: cv.id,
+          description: complaintText,
+          latitude,
+          longitude,
+          reporterPhone: complaintPhone.trim(),
+          citizenSessionId: localStorage.getItem('pazar_citizen_session') || undefined,
+          photoFile: complaintPhoto || undefined,
+        })
+      } catch {
+        await submitComplaintOffline()
+      }
       if (!localStorage.getItem('pazar_citizen_session')) {
         try {
           localStorage.setItem('pazar_citizen_session', `anon-${Date.now()}`)

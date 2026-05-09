@@ -4,7 +4,12 @@ import { getPanelPathForRole } from './utils/rolePaths.js'
 import RequireRole from './components/RequireRole.jsx'
 import VatandasPanel from './components/VatandasPanel.jsx'
 import { markets as mockMarkets, DAYS_TR as DAYS_TR_FALLBACK, products as mockProducts } from './data/markets'
-import { fetchMarkets, fetchProducts, fetchWeather, fetchDaysTr } from './api/pazarApi'
+import {
+  getCatalogMarkets,
+  getCatalogProducts,
+  getCatalogWeather,
+  getCatalogDaysTr,
+} from './data/offlineDataset.js'
 import { getUserLocation, calculateDistance, isMarketOpenToday, findClosestCity } from './utils/helpers'
 import MapView from './components/MapView'
 import LoginPage from './components/LoginPage'
@@ -87,34 +92,21 @@ export default function App() {
   }, [shopList])
 
   useEffect(() => {
-    let cancel = false
-    fetchDaysTr().then((d) => { if (!cancel && Array.isArray(d) && d.length) setDaysTr(d) }).catch(() => {})
-    return () => { cancel = true }
+    setDaysTr(getCatalogDaysTr())
   }, [])
 
   useEffect(() => {
     if (!hasSelectedCity) return
-    let cancel = false
-    ;(async () => {
-      try {
-        const [m, p, w] = await Promise.all([fetchMarkets(city), fetchProducts(), fetchWeather(city)])
-        if (cancel) return
-        setMarketsCatalog(Array.isArray(m) && m.length ? m : mockMarkets.filter((x) => x.city === city))
-        setProductsCatalog(Array.isArray(p) && p.length ? p : mockProducts)
-        setWeatherInfo({
-          temp: w.temp,
-          desc: w.desc,
-          icon: weatherIconName(w.icon),
-          tip: w.tip || '',
-        })
-      } catch {
-        if (!cancel) {
-          setMarketsCatalog(mockMarkets.filter((x) => x.city === city))
-          setProductsCatalog(mockProducts)
-        }
-      }
-    })()
-    return () => { cancel = true }
+    const m = getCatalogMarkets(city)
+    setMarketsCatalog(m.length ? m : mockMarkets.filter((x) => x.city === city))
+    setProductsCatalog(getCatalogProducts())
+    const w = getCatalogWeather(city)
+    setWeatherInfo({
+      temp: w.temp,
+      desc: w.desc,
+      icon: weatherIconName(w.icon),
+      tip: w.tip || '',
+    })
   }, [city, hasSelectedCity])
 
   const addToShopList = (product, subtype = null) => {

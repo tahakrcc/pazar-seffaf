@@ -2,16 +2,18 @@ import { useEffect, useMemo, useState } from 'react'
 import { Navigate, useParams } from 'react-router-dom'
 import RolePanelLayout from './layout/RolePanelLayout.jsx'
 import {
-  fetchVendorMe,
-  fetchVendorProducts,
-  fetchProducts,
-  fetchMarketPrices,
   postVendorProduct,
   patchVendorProductPublish,
-  fetchVendorInvoices,
   postVendorInvoice,
   patchVendorInvoiceLines,
 } from '../api/pazarApi'
+import {
+  STATIC_VENDOR_PROFILE,
+  getStaticVendorProducts,
+  getCatalogProducts,
+  getDetailPrices,
+  STATIC_VENDOR_INVOICES,
+} from '../data/offlineDataset.js'
 import Icon from './Icon.jsx'
 import RoleMissionCards from './RoleMissionCards.jsx'
 import RolePanelQuickNav from './RolePanelQuickNav.jsx'
@@ -83,28 +85,18 @@ export default function EsnafPanel({ user, darkMode, setDarkMode }) {
 
   async function loadCore() {
     setErr('')
-    try {
-      const [m, vp, pr] = await Promise.all([fetchVendorMe(), fetchVendorProducts(), fetchProducts()])
-      setMe(m)
-      setVendorProducts(Array.isArray(vp) ? vp : [])
-      setCatalog(Array.isArray(pr) ? pr : [])
-      setStallImagePreview(getStallImage(m?.id))
-      if (m?.marketId) {
-        const prices = await fetchMarketPrices(m.marketId)
-        setMarketPrices(Array.isArray(prices) ? prices : [])
-      }
-    } catch (e) {
-      setErr(String(e.message || e))
+    const m = STATIC_VENDOR_PROFILE
+    setMe(m)
+    setVendorProducts(getStaticVendorProducts(m.id))
+    setCatalog(getCatalogProducts())
+    setStallImagePreview(getStallImage(m?.id))
+    if (m?.marketId) {
+      setMarketPrices(getDetailPrices(m.marketId))
     }
   }
 
   async function loadInvoices() {
-    try {
-      const list = await fetchVendorInvoices()
-      setInvoices(Array.isArray(list) ? list : [])
-    } catch {
-      setInvoices([])
-    }
+    setInvoices(STATIC_VENDOR_INVOICES)
   }
 
   useEffect(() => {

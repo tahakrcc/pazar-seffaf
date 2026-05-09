@@ -1,13 +1,11 @@
 import { useEffect, useState } from 'react'
+import { patchOfficerComplaint, postOfficerInspection, postOfficerViolation } from '../api/pazarApi'
 import {
-  fetchMarkets,
-  fetchMarketVendors,
-  fetchOfficerComplaints,
-  fetchOfficerInspections,
-  patchOfficerComplaint,
-  postOfficerInspection,
-  postOfficerViolation,
-} from '../api/pazarApi'
+  getAllMarkets,
+  getVendorsForMarket,
+  STATIC_COMPLAINTS,
+  getOfficerInspectionsList,
+} from '../data/offlineDataset.js'
 import RolePanelLayout from './layout/RolePanelLayout.jsx'
 import RoleMissionCards from './RoleMissionCards.jsx'
 import RolePanelQuickNav from './RolePanelQuickNav.jsx'
@@ -44,19 +42,15 @@ export default function ZabitaPanel({ user, darkMode, setDarkMode }) {
     { key: 'history', icon: 'history', label: 'Geçmiş' },
   ]
 
-  const refresh = async () => {
+  const refresh = () => {
     setErr('')
-    try {
-      const [m, ins, comp] = await Promise.all([fetchMarkets(''), fetchOfficerInspections(), fetchOfficerComplaints()])
-      const ml = Array.isArray(m) ? m : []
-      setMarkets(ml)
-      if (selectedMarket == null && ml.length) setSelectedMarket(ml[0].id)
-      setInspections(Array.isArray(ins) ? ins : [])
-      setComplaints(Array.isArray(comp) ? comp : [])
-      if (!lastInspectionId && Array.isArray(ins) && ins[0]?.id) setLastInspectionId(ins[0].id)
-    } catch (e) {
-      setErr(String(e.message || e))
-    }
+    const ml = getAllMarkets()
+    setMarkets(ml)
+    if (selectedMarket == null && ml.length) setSelectedMarket(ml[0].id)
+    setInspections(getOfficerInspectionsList())
+    setComplaints(STATIC_COMPLAINTS.map((c) => ({ ...c })))
+    const ins = getOfficerInspectionsList()
+    if (!lastInspectionId && ins[0]?.id) setLastInspectionId(ins[0].id)
   }
 
   // refresh fonksiyonu bu bileşende sabit iş akışı için mount sırasında çağrılır.
@@ -64,17 +58,15 @@ export default function ZabitaPanel({ user, darkMode, setDarkMode }) {
   useEffect(() => { refresh() }, [])
   useEffect(() => {
     if (selectedMarket == null) return
-    let cancel = false
-    fetchMarketVendors(selectedMarket).then((v) => !cancel && setVendors(Array.isArray(v) ? v : [])).catch(() => !cancel && setVendors([]))
-    return () => { cancel = true }
+    setVendors(getVendorsForMarket(selectedMarket))
   }, [selectedMarket])
 
   const marketName = (id) => markets.find((x) => x.id === id)?.name || `Pazar #${id}`
   const violationCount = inspections.filter((i) => i.status === 'violation').length
 
   const saveInspection = async () => {
+    const today = new Date().toISOString().slice(0, 10)
     try {
-      const today = new Date().toISOString().slice(0, 10)
       const res = await postOfficerInspection({
         marketId: selectedMarket,
         inspectionDate: today,
@@ -83,11 +75,23 @@ export default function ZabitaPanel({ user, darkMode, setDarkMode }) {
         notes: inspectionNotes,
       })
       setLastInspectionId(res.id)
-      setMsg('Denetim kaydı oluşturuldu.')
-      await refresh()
-    } catch (e) {
-      alert(String(e.message || e))
+    } catch {
+      const nextId = Math.max(0, ...inspections.map((i) => i.id || 0)) + 1
+      setInspections((prev) => [
+        ...prev,
+        {
+          id: nextId,
+          marketId: selectedMarket,
+          inspectionDate: today,
+          status: statusPick,
+          violationsCount: violCount,
+          notes: inspectionNotes,
+          inspector: 'Yerel kayıt',
+        },
+      ])
+      setLastInspectionId(nextId)
     }
+    setMsg('Denetim kaydı oluşturuldu (yerel demo).')
   }
 
   const saveViolation = async () => {
@@ -103,20 +107,22 @@ export default function ZabitaPanel({ user, darkMode, setDarkMode }) {
         type: newViolation.type,
         description: newViolation.desc || '',
       })
-      setNewViolation({ vendorId: '', type: '', desc: '' })
-      setMsg('İhlal kaydedildi.')
-    } catch (e) {
-      alert(String(e.message || e))
+    } catch {
+      /* yerel mod — sunucu yok */
     }
+    setNewViolation({ vendorId: '', type: '', desc: '' })
+    setMsg('İhlal kaydı yerel oturumda tutuldu (demo).')
   }
 
   const claimOrResolve = async (id, status) => {
     try {
       await patchOfficerComplaint(id, status)
-      await refresh()
-    } catch (e) {
-      alert(String(e.message || e))
+    } catch {
+      /* offline demo */
     }
+    setComplaints((prev) =>
+      prev.map((c) => (Number(c.id) === Number(id) ? { ...c, status } : c)),
+    )
   }
 
   const quickNavItems = tabs.map((t) => ({
@@ -161,7 +167,7 @@ export default function ZabitaPanel({ user, darkMode, setDarkMode }) {
       {tab === 'overview' && (
         <section className="chart-card">
           <h3>Genel Durum</h3>
-          <p className="muted">Tüm veriler canlı API üzerinden alınır. Yeni kayıt için ilgili sekmeyi kullanın.</p>
+          <p className="muted">Örnek veriler yalnızca tarayıcıda (frontend) tutulur; backend zorunlu değildir.</p>
           <button type="button" className="btn-v2 btn-primary" onClick={refresh}>Verileri yenile</button>
         </section>
       )}

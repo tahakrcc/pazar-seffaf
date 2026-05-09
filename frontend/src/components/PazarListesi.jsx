@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback } from 'react'
 import { products as defaultProducts, markets as defaultMarkets, getMarketPrices, vendors } from '../data/markets'
-import { aiOptimizeBudget } from '../api/pazarApi'
+import { localAiOptimizeBudget } from '../data/offlineDataset.js'
 import { exportShoppingListImage } from '../utils/listExport'
 import { getProductIconName } from '../utils/productIcon.js'
 import Icon from './Icon.jsx'
@@ -160,7 +160,7 @@ export default function PazarListesi({
     setAiError(null)
     setAiResult(null)
     try {
-      const res = await aiOptimizeBudget(mid, budget, productIds, quantitiesMap)
+      const res = localAiOptimizeBudget(mid, budget, productIds, quantitiesMap)
       setAiResult(res && typeof res === 'object' ? res : null)
       const lines = Array.isArray(res?.items) ? res.items : []
       const nextDraft = lines.map((row, idx) => {

@@ -1,16 +1,18 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
-  fetchMarkets,
-  fetchMarketLayout,
-  fetchAdminMunicipalities,
-  fetchAdminVendors,
-  fetchAdminInspections,
-  fetchAdminOfficers,
-  fetchAdminComplaints,
   postAdminAssignment,
   postAdminMarket,
   postAdminMarketLayout,
 } from '../api/pazarApi'
+import {
+  getAllMarkets,
+  getAdminVendors,
+  STATIC_MUNICIPALITIES,
+  STATIC_COMPLAINTS,
+  STATIC_OFFICERS,
+  getMarketLayoutResponse,
+  getAdminInspectionsDisplay,
+} from '../data/offlineDataset.js'
 import Icon from './Icon.jsx'
 import RolePanelLayout from './layout/RolePanelLayout.jsx'
 import { addMergedSchemaTool, getMergedSchemaTools } from '../config/schemaCellTypes.js'
@@ -106,33 +108,21 @@ export default function Dashboard({ user, darkMode, setDarkMode }) {
     image: '',
   })
 
-  const refreshAll = useCallback(async () => {
+  const refreshAll = useCallback(() => {
     setLoadErr('')
-    try {
-      const [m, v, ins, mun, o, comp] = await Promise.all([
-        fetchMarkets(''),
-        fetchAdminVendors(),
-        fetchAdminInspections(),
-        fetchAdminMunicipalities(),
-        fetchAdminOfficers(),
-        fetchAdminComplaints(),
-      ])
-      const ml = Array.isArray(m) ? m : []
-      setMarkets(ml)
-      setVendors(Array.isArray(v) ? v : [])
-      setInspections(Array.isArray(ins) ? ins : [])
-      setMunicipalities(Array.isArray(mun) ? mun : [])
-      setOfficers(Array.isArray(o) ? o : [])
-      setComplaints(Array.isArray(comp) ? comp : [])
-      const open = (Array.isArray(comp) ? comp : []).filter((c) =>
-        ['NEW', 'ASSIGNED', 'IN_PROGRESS'].includes(c.status)
-      ).length
-      setOpenComplaints(open)
-      if (Array.isArray(mun) && mun.length) {
-        setNewMarket((nm) => (nm.municipalityId == null ? { ...nm, municipalityId: mun[0].id } : nm))
-      }
-    } catch (e) {
-      setLoadErr(String(e.message || e))
+    const ml = getAllMarkets()
+    setMarkets(ml)
+    setVendors(getAdminVendors())
+    setInspections(getAdminInspectionsDisplay())
+    const mun = STATIC_MUNICIPALITIES
+    setMunicipalities(mun)
+    setOfficers(STATIC_OFFICERS.map((x) => ({ ...x })))
+    const comp = STATIC_COMPLAINTS.map((c) => ({ ...c }))
+    setComplaints(comp)
+    const open = comp.filter((c) => ['NEW', 'ASSIGNED', 'IN_PROGRESS'].includes(c.status)).length
+    setOpenComplaints(open)
+    if (mun.length) {
+      setNewMarket((nm) => (nm.municipalityId == null ? { ...nm, municipalityId: mun[0].id } : nm))
     }
   }, [])
 
@@ -140,15 +130,10 @@ export default function Dashboard({ user, darkMode, setDarkMode }) {
     refreshAll()
   }, [refreshAll])
 
-  const loadSchema = useCallback(async (marketId) => {
+  const loadSchema = useCallback((marketId) => {
     if (marketId == null) return
-    try {
-      const raw = await fetchMarketLayout(marketId)
-      setSchemaState(normalizeLayoutResponse(raw))
-    } catch (e) {
-      setLoadErr(String(e.message || e))
-      setSchemaState({ revision: 0, layout: normalizeLayout(null) })
-    }
+    const raw = getMarketLayoutResponse(marketId)
+    setSchemaState(normalizeLayoutResponse(raw))
   }, [])
 
   useEffect(() => {
@@ -190,8 +175,11 @@ export default function Dashboard({ user, darkMode, setDarkMode }) {
       )
       await loadSchema(selectedMarketId)
       await refreshAll()
-    } catch (e) {
-      alert(String(e.message || e))
+    } catch {
+      setSchemaState((prev) => ({
+        revision: prev.revision + 1,
+        layout: normalizeLayout({ ...prev.layout, nodes: nextNodes }),
+      }))
     }
     setEditingStall(null)
   }
@@ -204,8 +192,13 @@ export default function Dashboard({ user, darkMode, setDarkMode }) {
       await postAdminMarketLayout(selectedMarketId, toBackendLayoutPayload(nextLayout), schemaState.revision)
       await loadSchema(selectedMarketId)
       alert('Yerleşim kaydedildi.')
-    } catch (e) {
-      alert(String(e.message || e))
+    } catch {
+      const nextLayout = editorCanvasToLayout(nextCanvas)
+      setSchemaState((prev) => ({
+        revision: prev.revision + 1,
+        layout: normalizeLayout(nextLayout),
+      }))
+      alert('Sunucu yok; yerleşim yalnızca bu oturumda güncellendi.')
     } finally {
       setCanvasSaving(false)
     }
@@ -215,6 +208,25 @@ export default function Dashboard({ user, darkMode, setDarkMode }) {
     if (!newMarket.name || !newMarket.municipalityId) {
       alert('Belediye ve pazar adı zorunludur.')
       return
+    }
+    const openingDaysArr = String(newMarket.openingDays || '')
+      .split(/[\s,]+/)
+      .map((x) => Number(x.trim()))
+      .filter((n) => Number.isFinite(n))
+    const nextId = Math.max(0, ...markets.map((m) => Number(m.id) || 0)) + 1
+    const created = {
+      id: nextId,
+      name: newMarket.name,
+      district: newMarket.district || newMarket.city,
+      city: newMarket.city,
+      lat: Number(newMarket.latitude) || 0,
+      lng: Number(newMarket.longitude) || 0,
+      days: openingDaysArr.length ? openingDaysArr : [1, 2, 3, 4, 5],
+      hours: newMarket.hours || '07:00-17:00',
+      vendorCount: Number(newMarket.vendorCount) || 0,
+      type: newMarket.type || 'Semt Pazarı',
+      address: newMarket.address || '',
+      image: newMarket.image || '/market_1_1777411006018.png',
     }
     try {
       await postAdminMarket({
@@ -232,15 +244,16 @@ export default function Dashboard({ user, darkMode, setDarkMode }) {
         image: newMarket.image || '/market_1_1777411006018.png',
       })
       await refreshAll()
-      setNewMarket((nm) => ({
-        ...nm,
-        name: '',
-        district: '',
-      }))
-      alert('Pazar oluşturuldu.')
-    } catch (e) {
-      alert(String(e.message || e))
+    } catch {
+      setMarkets((prev) => [...prev, created])
+      setSelectedMarketId(created.id)
     }
+    setNewMarket((nm) => ({
+      ...nm,
+      name: '',
+      district: '',
+    }))
+    alert('Pazar oluşturuldu (yerel listede; backend isteğe bağlı).')
   }
 
   const assignComplaint = async (complaintId, officerUserId) => {
@@ -249,8 +262,22 @@ export default function Dashboard({ user, darkMode, setDarkMode }) {
     try {
       await postAdminAssignment(complaintId, Number(officerUserId))
       await refreshAll()
-    } catch (e) {
-      alert(String(e.message || e))
+    } catch {
+      const officer = officers.find((o) => Number(o.id) === Number(officerUserId))
+      setComplaints((prev) => {
+        const next = prev.map((c) =>
+          Number(c.id) === Number(complaintId)
+            ? {
+                ...c,
+                status: 'ASSIGNED',
+                assignedOfficerName: officer?.name || '',
+              }
+            : c,
+        )
+        const open = next.filter((c) => ['NEW', 'ASSIGNED', 'IN_PROGRESS'].includes(c.status)).length
+        setOpenComplaints(open)
+        return next
+      })
     } finally {
       setAssigningId(null)
     }
@@ -319,10 +346,10 @@ export default function Dashboard({ user, darkMode, setDarkMode }) {
           <>
             <div className="stats-grid">
               {[
-                { val: markets.length, label: 'Toplam Pazar', change: 'API', dir: 'up', gradient: 'linear-gradient(135deg,#00a651,#007a3d)' },
-                { val: vendors.length, label: 'Kayıtlı Esnaf', change: 'API', dir: 'up', gradient: 'linear-gradient(135deg,#10b981,#0ea5e9)' },
+                { val: markets.length, label: 'Toplam Pazar', change: 'Örnek', dir: 'up', gradient: 'linear-gradient(135deg,#00a651,#007a3d)' },
+                { val: vendors.length, label: 'Kayıtlı Esnaf', change: 'Örnek', dir: 'up', gradient: 'linear-gradient(135deg,#10b981,#0ea5e9)' },
                 { val: 0, label: 'Aktif kullanıcı', change: 'Yakında', dir: 'up', gradient: 'linear-gradient(135deg,#f59e0b,#ef4444)' },
-                { val: openComplaints, label: 'Açık Şikâyet', change: 'API', dir: 'down', gradient: 'linear-gradient(135deg,#64748b,#475569)' },
+                { val: openComplaints, label: 'Açık Şikâyet', change: 'Örnek', dir: 'down', gradient: 'linear-gradient(135deg,#64748b,#475569)' },
               ].map((s, i) => (
                 <div key={i} className="stat-card-gradient" style={{ background: s.gradient }}>
                   <div className="stat-value" style={{ fontSize: '2rem', fontWeight: 900 }}>

@@ -3,7 +3,12 @@ import RolePanelLayout from './layout/RolePanelLayout.jsx'
 import RoleMissionCards from './RoleMissionCards.jsx'
 import RolePanelQuickNav from './RolePanelQuickNav.jsx'
 import Icon from './Icon.jsx'
-import { fetchNotifications, submitComplaint, fetchMarkets } from '../api/pazarApi'
+import { submitComplaint } from '../api/pazarApi'
+import {
+  STATIC_NOTIFICATIONS,
+  getAllMarkets,
+  submitComplaintOffline,
+} from '../data/offlineDataset.js'
 
 const VATANDAS_MISSIONS = [
   { icon: 'shopping_basket', title: 'Akıllı Liste', desc: 'İhtiyaçlarınızı ekleyin, yapay zeka ile en uygun pazarı ve bütçe planını bulun.' },
@@ -26,16 +31,8 @@ export default function VatandasPanel({ user, darkMode, setDarkMode, shopList })
   const [msg, setMsg] = useState('')
 
   useEffect(() => {
-    let cancel = false
-    fetchNotifications().then(n => {
-      if (!cancel) setNotifications(Array.isArray(n) ? n : [])
-    }).catch(() => {})
-    
-    fetchMarkets().then(m => {
-      if (!cancel) setMarkets(Array.isArray(m) ? m : [])
-    }).catch(() => {})
-
-    return () => { cancel = true }
+    setNotifications(STATIC_NOTIFICATIONS)
+    setMarkets(getAllMarkets())
   }, [])
 
   const handleComplaintSubmit = async (e) => {
@@ -43,7 +40,11 @@ export default function VatandasPanel({ user, darkMode, setDarkMode, shopList })
     setLoading(true)
     setMsg('')
     try {
-      await submitComplaint(complaintForm)
+      try {
+        await submitComplaint(complaintForm)
+      } catch {
+        await submitComplaintOffline()
+      }
       setMsg('Şikayetiniz başarıyla iletildi. Teşekkür ederiz.')
       setComplaintForm({ marketId: '', vendorId: '', description: '', reporterPhone: '', photoFile: null })
     } catch (err) {
