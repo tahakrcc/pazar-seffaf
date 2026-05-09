@@ -16,6 +16,12 @@ export const markets = [
   { id: 10, name: 'Kızılay Halk Pazarı', district: 'Çankaya', city: 'Ankara', lat: 39.9215, lng: 32.8537, days: [3, 6], hours: '06:00-17:00', vendorCount: 180, type: 'Halk Pazarı', address: 'Kızılay Mah., Çankaya/Ankara', image: '/market_1_1777411006018.png' },
   { id: 11, name: 'Kemeraltı Pazarı', district: 'Konak', city: 'İzmir', lat: 38.4189, lng: 27.1287, days: [0, 3, 6], hours: '08:00-20:00', vendorCount: 250, type: 'Tarihi Pazar', address: 'Kemeraltı, Konak/İzmir', image: '/market_2_1777411026004.png' },
   { id: 12, name: 'Antalya Cumartesi Pazarı', district: 'Muratpaşa', city: 'Antalya', lat: 36.8969, lng: 30.7133, days: [6], hours: '07:00-16:00', vendorCount: 160, type: 'Semt Pazarı', address: 'Muratpaşa/Antalya', image: '/market_3_1777411048594.png' },
+  { id: 13, name: 'Üsküdar Salı Pazarı', district: 'Üsküdar', city: 'İstanbul', lat: 41.0225, lng: 29.0150, days: [2], hours: '07:00-18:00', vendorCount: 140, type: 'Semt Pazarı', address: 'Mimar Sinan Mah., Üsküdar/İstanbul', image: '/market_1_1777411006018.png' },
+  { id: 14, name: 'Fatih Perşembe Pazarı', district: 'Fatih', city: 'İstanbul', lat: 41.0192, lng: 28.9495, days: [4], hours: '06:30-17:30', vendorCount: 190, type: 'Halk Pazarı', address: 'Akşemsettin Mah., Fatih/İstanbul', image: '/market_3_1777411048594.png' },
+  { id: 15, name: 'Bakırköy Cumartesi Pazarı', district: 'Bakırköy', city: 'İstanbul', lat: 40.9833, lng: 28.8734, days: [6], hours: '07:00-19:00', vendorCount: 220, type: 'Semt Pazarı', address: 'Zeytinlik Mah., Bakırköy/İstanbul', image: '/market_2_1777411026004.png' },
+  { id: 16, name: 'Şişli Pazartesi Pazarı', district: 'Şişli', city: 'İstanbul', lat: 41.0608, lng: 28.9871, days: [1], hours: '07:00-18:00', vendorCount: 175, type: 'Mahalle Pazarı', address: 'Esentepe Mah., Şişli/İstanbul', image: '/market_1_1777411006018.png' },
+  { id: 17, name: 'Beyoğlu Organik Pazarı', district: 'Beyoğlu', city: 'İstanbul', lat: 41.0369, lng: 28.9784, days: [0, 3], hours: '08:00-20:00', vendorCount: 95, type: 'Organik Pazar', address: 'Kuloğlu Mah., Beyoğlu/İstanbul', image: '/market_3_1777411048594.png' },
+  { id: 18, name: 'Ümraniye Semt Pazarı', district: 'Ümraniye', city: 'İstanbul', lat: 41.0166, lng: 29.1158, days: [3, 6], hours: '07:00-17:00', vendorCount: 210, type: 'Semt Pazarı', address: 'Çakmak Mah., Ümraniye/İstanbul', image: '/market_2_1777411026004.png' },
 ];
 
 export const products = [
@@ -81,6 +87,70 @@ export const vendors = [
   { id: 22, marketId: 9, name: 'Gülhanım Tekin', stall: 'BS-06', score: 90, products: [2,4,6] },
   { id: 23, marketId: 9, name: 'Barış Yıldırım', stall: 'BS-07', score: 84, products: [3,9,10] },
   { id: 24, marketId: 9, name: 'Canan Ertürk', stall: 'BS-08', score: 92, products: [7,12,15] },
+
+  // Kadıköy Pazarı (id: 8)
+  { id: 25, marketId: 8, name: 'Deniz Koral', stall: 'KDK-01', score: 91, products: [1, 2, 8] },
+  { id: 26, marketId: 8, name: 'Levent Akın', stall: 'KDK-02', score: 88, products: [3, 4, 9] },
+  { id: 27, marketId: 8, name: 'Serpil Tunç', stall: 'KDK-03', score: 94, products: [5, 6, 11] },
+  { id: 28, marketId: 8, name: 'Burak Menekşe', stall: 'KDK-04', score: 86, products: [10, 12, 14] },
+  { id: 29, marketId: 8, name: 'Ebru Sarı', stall: 'KDK-05', score: 90, products: [7, 13, 15] },
+  { id: 30, marketId: 8, name: 'Kaan Özer', stall: 'KDK-06', score: 83, products: [1, 4, 16] },
+  { id: 31, marketId: 8, name: 'Melis Erdem', stall: 'KDK-07', score: 89, products: [2, 5, 9] },
+  { id: 32, marketId: 8, name: 'Orhan Tek', stall: 'KDK-08', score: 87, products: [3, 8, 11] },
+  { id: 33, marketId: 8, name: 'Yeliz Koç', stall: 'KDK-09', score: 92, products: [6, 10, 14] },
+  { id: 34, marketId: 8, name: 'Onur Dağ', stall: 'KDK-10', score: 85, products: [4, 7, 12] },
+
+  // Üsküdar Salı Pazarı (13)
+  { id: 35, marketId: 13, name: 'Hüseyin Baştürk', stall: 'USK-01', score: 88, products: [1, 3, 8] },
+  { id: 36, marketId: 13, name: 'Sevim Altun', stall: 'USK-02', score: 91, products: [2, 5, 9] },
+  { id: 37, marketId: 13, name: 'Mert Çolak', stall: 'USK-03', score: 84, products: [4, 6, 11] },
+  { id: 38, marketId: 13, name: 'Nazan Işık', stall: 'USK-04', score: 90, products: [7, 10, 14] },
+  { id: 39, marketId: 13, name: 'Volkan Ersoy', stall: 'USK-05', score: 86, products: [8, 12, 15] },
+  { id: 40, marketId: 13, name: 'Aslı Berber', stall: 'USK-06', score: 93, products: [1, 13, 16] },
+
+  // Fatih Perşembe Pazarı (14)
+  { id: 41, marketId: 14, name: 'İbrahim Halıcı', stall: 'FTH-01', score: 89, products: [2, 4, 8] },
+  { id: 42, marketId: 14, name: 'Reyhan Tok', stall: 'FTH-02', score: 87, products: [1, 9, 12] },
+  { id: 43, marketId: 14, name: 'Cem Turan', stall: 'FTH-03', score: 92, products: [3, 5, 11] },
+  { id: 44, marketId: 14, name: 'Hande Kurt', stall: 'FTH-04', score: 85, products: [6, 10, 14] },
+  { id: 45, marketId: 14, name: 'Erkan Sağlam', stall: 'FTH-05', score: 88, products: [7, 13, 15] },
+  { id: 46, marketId: 14, name: 'Filiz Önen', stall: 'FTH-06', score: 94, products: [4, 8, 16] },
+
+  // Bakırköy Cumartesi Pazarı (15)
+  { id: 47, marketId: 15, name: 'Tolga Karaca', stall: 'BKV-01', score: 90, products: [1, 2, 3] },
+  { id: 48, marketId: 15, name: 'Banu Yurt', stall: 'BKV-02', score: 86, products: [4, 5, 6] },
+  { id: 49, marketId: 15, name: 'Emre Fırat', stall: 'BKV-03', score: 91, products: [7, 8, 9] },
+  { id: 50, marketId: 15, name: 'Gizem Ulu', stall: 'BKV-04', score: 88, products: [10, 11, 12] },
+  { id: 51, marketId: 15, name: 'Kemal Duran', stall: 'BKV-05', score: 84, products: [13, 14, 15] },
+  { id: 52, marketId: 15, name: 'Pınar Akdeniz', stall: 'BKV-06', score: 93, products: [1, 5, 9] },
+  { id: 53, marketId: 15, name: 'Serkan Bulut', stall: 'BKV-07', score: 87, products: [2, 6, 10] },
+  { id: 54, marketId: 15, name: 'Tuğba Ergin', stall: 'BKV-08', score: 89, products: [3, 7, 16] },
+
+  // Şişli Pazartesi Pazarı (16)
+  { id: 55, marketId: 16, name: 'Alp Sever', stall: 'SIS-01', score: 88, products: [1, 4, 8] },
+  { id: 56, marketId: 16, name: 'Burcu Tan', stall: 'SIS-02', score: 91, products: [2, 5, 11] },
+  { id: 57, marketId: 16, name: 'Cihan Polat', stall: 'SIS-03', score: 85, products: [3, 9, 12] },
+  { id: 58, marketId: 16, name: 'Derya Su', stall: 'SIS-04', score: 90, products: [6, 10, 14] },
+  { id: 59, marketId: 16, name: 'Engin Kaş', stall: 'SIS-05', score: 86, products: [7, 13, 15] },
+  { id: 60, marketId: 16, name: 'Figen Öz', stall: 'SIS-06', score: 92, products: [8, 16, 4] },
+
+  // Beyoğlu Organik Pazarı (17)
+  { id: 61, marketId: 17, name: 'Gökhan Elma', stall: 'BYG-01', score: 95, products: [5, 6, 13] },
+  { id: 62, marketId: 17, name: 'Hülya Üzüm', stall: 'BYG-02', score: 93, products: [1, 7, 11] },
+  { id: 63, marketId: 17, name: 'İpek Nar', stall: 'BYG-03', score: 89, products: [2, 8, 14] },
+  { id: 64, marketId: 17, name: 'Jale İncir', stall: 'BYG-04', score: 91, products: [3, 9, 15] },
+  { id: 65, marketId: 17, name: 'Kenan Ayva', stall: 'BYG-05', score: 87, products: [4, 10, 16] },
+  { id: 66, marketId: 17, name: 'Lale Dut', stall: 'BYG-06', score: 94, products: [12, 5, 6] },
+
+  // Ümraniye Semt Pazarı (18)
+  { id: 67, marketId: 18, name: 'Murat Çınarlı', stall: 'UMR-01', score: 88, products: [1, 2, 3] },
+  { id: 68, marketId: 18, name: 'Nihal Erten', stall: 'UMR-02', score: 90, products: [4, 5, 6] },
+  { id: 69, marketId: 18, name: 'Osman Giray', stall: 'UMR-03', score: 85, products: [7, 8, 9] },
+  { id: 70, marketId: 18, name: 'Özlem Kurtuluş', stall: 'UMR-04', score: 92, products: [10, 11, 12] },
+  { id: 71, marketId: 18, name: 'Rıza Mercan', stall: 'UMR-05', score: 87, products: [13, 14, 15] },
+  { id: 72, marketId: 18, name: 'Sibel Aksoy', stall: 'UMR-06', score: 89, products: [1, 6, 11] },
+  { id: 73, marketId: 18, name: 'Uğur Şimşek', stall: 'UMR-07', score: 84, products: [2, 7, 16] },
+  { id: 74, marketId: 18, name: 'Vildan Koşar', stall: 'UMR-08', score: 91, products: [3, 8, 12] },
 ];
 
 export const inspections = [

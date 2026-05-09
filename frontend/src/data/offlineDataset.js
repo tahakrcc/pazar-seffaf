@@ -10,6 +10,7 @@ import {
   getMarketPrices,
 } from './markets.js'
 import { kernekMarketCanvas } from './kernekCanvasSchema.js'
+import { ISTANBUL_MARKET_CANVAS } from './istanbulMarketCanvases.js'
 import { normalizeLayout } from '../features/schema/model/layoutModel.js'
 
 export function getCatalogMarkets(city) {
@@ -63,6 +64,15 @@ export function getMarketLayoutResponse(marketId) {
       formatVersion: 2,
       revision: 1,
       layout,
+    }
+  }
+  const istanbulCanvas = ISTANBUL_MARKET_CANVAS[id]
+  if (istanbulCanvas) {
+    return {
+      marketId: id,
+      formatVersion: 2,
+      revision: 1,
+      layout: { canvas: istanbulCanvas },
     }
   }
   return {
