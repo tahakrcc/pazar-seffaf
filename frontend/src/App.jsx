@@ -62,7 +62,7 @@ export default function App() {
   const location = useLocation()
 
   useEffect(() => {
-    const timer = setTimeout(() => setShowSplash(false), 1200)
+    const timer = setTimeout(() => setShowSplash(false), 2850)
     getUserLocation().then(loc => {
       setUserLoc(loc)
       if (!city) setCity(findClosestCity(loc.lat, loc.lng))
@@ -171,10 +171,29 @@ export default function App() {
 
   if (showSplash && !isAkis) {
     return (
-      <div className="splash-screen">
-        <img src="/logo.png" alt="Pazar Şeffaf Logo" className="splash-logo-img" />
-        <h1>Pazar Şeffaf</h1>
-        <p>Belediye Hizmet Sistemi</p>
+      <div className="splash-screen" role="status" aria-live="polite" aria-busy="true" aria-label="Uygulama açılıyor">
+        <div className="splash-screen__layer splash-screen__layer--sky" aria-hidden />
+        <div className="splash-screen__layer splash-screen__layer--glow" aria-hidden />
+        <div className="splash-screen__orb splash-screen__orb--1" aria-hidden />
+        <div className="splash-screen__orb splash-screen__orb--2" aria-hidden />
+        <div className="splash-screen__orb splash-screen__orb--3" aria-hidden />
+        <div className="splash-screen__inner">
+          <div className="splash-screen__brand">
+            <div className="splash-screen__logo-ring" aria-hidden />
+            <div className="splash-screen__logo-wrap">
+              <img src="/logo.png" alt="" width={88} height={88} className="splash-logo-img" decoding="async" />
+            </div>
+          </div>
+          <h1 className="splash-screen__title">
+            <span className="splash-screen__title-main">Pazar Şeffaf</span>
+          </h1>
+          <p className="splash-screen__tagline">Belediye Hizmet Sistemi</p>
+          <div className="splash-screen__pulse" aria-hidden>
+            <span />
+            <span />
+            <span />
+          </div>
+        </div>
       </div>
     )
   }
