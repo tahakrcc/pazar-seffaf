@@ -1,9 +1,31 @@
-import { useState, useEffect } from 'react'
-import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch'
+import { useState, useEffect, Component } from 'react'
 import Icon from '../Icon.jsx'
-import SchemaCanvasViewer from '../SchemaCanvasViewer.jsx'
+import SchemaViewport from '../../features/schema/components/SchemaViewport.jsx'
 import SchemaCellInner from '../SchemaCellInner.jsx'
 import { getProductIconName } from '../../utils/productIcon.js'
+import PazarListesi from '../PazarListesi.jsx'
+class SchemaErrorBoundary extends Component {
+  constructor(props) {
+    super(props)
+    this.state = { hasError: false, error: null }
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error }
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ padding: 20, background: '#fee2e2', color: '#b91c1c', zIndex: 9999, position: 'relative' }}>
+          <h3>Harita Yüklenirken Hata Oluştu</h3>
+          <pre>{this.state.error?.toString()}</pre>
+          <pre style={{ fontSize: '0.8rem', marginTop: 10 }}>{this.state.error?.stack}</pre>
+          <button onClick={this.props.onClose} style={{ marginTop: 10, padding: 8, background: '#b91c1c', color: 'white', border: 'none', borderRadius: 4 }}>Kapat</button>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
 
 function StallBottomSheet({
   selectedStall,
@@ -107,8 +129,7 @@ export default function MarketDetailSchemaModal({
   is3D,
   onToggle3D,
   onClose,
-  displaySchema,
-  canvas,
+  layout,
   vendors,
   selectedStall,
   onSelectStall,
@@ -121,8 +142,15 @@ export default function MarketDetailSchemaModal({
   userRole,
   onComplaintFromStall,
   getStallPhoto,
+  shopList,
+  setShopList,
+  city,
+  marketsCatalog,
+  productsCatalog,
+  marketId,
 }) {
   const [serviceHint, setServiceHint] = useState(null)
+  const [showMobileList, setShowMobileList] = useState(false)
 
   useEffect(() => {
     if (!open) setServiceHint(null)
@@ -140,7 +168,8 @@ export default function MarketDetailSchemaModal({
 
   return (
     <div className="schema-fullscreen-overlay md-schema-fs">
-      <div className="schema-fs-header md-schema-fs__header">
+      <SchemaErrorBoundary onClose={onClose}>
+        <div className="schema-fs-header md-schema-fs__header">
         <div>
           <h2 className="md-schema-fs__title">{title}</h2>
           <p className="md-schema-fs__subtitle">{marketName}</p>
@@ -153,6 +182,16 @@ export default function MarketDetailSchemaModal({
           >
             {is3D ? '2D' : '3D'}
           </button>
+          
+          <button 
+            type="button" 
+            className="md-schema-fs__pill md-schema-fs__pill--list-toggle" 
+            onClick={() => setShowMobileList(!showMobileList)}
+          >
+            <Icon name="shopping_cart" size={18} />
+            {shopList?.length > 0 ? `(${shopList.length})` : ''}
+          </button>
+
           <button type="button" className="md-schema-fs__close" onClick={onClose} aria-label="Kapat">
             <Icon name="close" size={22} />
           </button>
@@ -163,90 +202,45 @@ export default function MarketDetailSchemaModal({
           {serviceHint}
         </div>
       ) : null}
-      <div className="schema-fs-body md-schema-fs__body">
-        <TransformWrapper initialScale={1} minScale={0.4} maxScale={4} centerOnInit wheel={{ step: 0.04 }} pinch={{ step: 3 }}>
-          <TransformComponent wrapperStyle={{ width: '100%', height: '100%' }} contentStyle={{ padding: '40px' }}>
-            {canvas != null ? (
-              <SchemaCanvasViewer
-                canvas={canvas}
-                vendors={vendors}
-                mergedSchemaTools={mergedSchemaTools}
-                is3D={is3D}
-                selectedFilterProducts={selectedFilterProducts}
-                selectedStall={selectedStall}
-                onSelectStall={onSelectStall}
-                onTartiHint={() => {
-                  setServiceHint('Tartı noktası — tartım için buraya başvurun.')
-                  window.setTimeout(() => setServiceHint(null), 3200)
-                }}
-                onEmptyStallHint={() => {
-                  setServiceHint('Bu tezgahta kayıtlı esnaf bulunmuyor.')
-                  window.setTimeout(() => setServiceHint(null), 2800)
-                }}
-              />
-            ) : (
-            <div
-              className={`schema-grid schema-grid--viewer ${is3D ? 'schema-grid-3d' : ''}`}
-              style={{ gridTemplateColumns: `repeat(${displaySchema.cols}, 1fr)` }}
-            >
-              {displaySchema.cells.map((cell) => {
-                const cellVendor = cell.vendorId ? vendors.find((v) => v.id === cell.vendorId) : null
-                const hasProduct =
-                  selectedFilterProducts.length > 0 &&
-                  cellVendor &&
-                  cellVendor.products.some((pid) => selectedFilterProducts.find((sp) => sp.id === pid))
-                const isDimmed = selectedFilterProducts.length > 0 && cell.type === 'stall' && !hasProduct
-                const isActive = selectedStall && selectedStall.id === cell.id
-                const typeClass = String(cell.type).replace(/[^a-zA-Z0-9_-]/g, '_')
-                const wallStyle =
-                  cell.type === 'wall' ? getWallLineStyle(cell.id, schemaTypeMap) : undefined
-                return (
-                  <div
-                    key={cell.id}
-                    className={`grid-cell cell-${typeClass} ${cellVendor ? 'has-vendor' : ''} ${isDimmed ? 'dimmed' : ''} ${isActive ? 'active' : ''}`}
-                    style={wallStyle}
-                    onClick={() => {
-                      if (cell.type === 'tarti') {
-                        setServiceHint('Tartı noktası — tartım için buraya başvurun.')
-                        window.setTimeout(() => setServiceHint(null), 3200)
-                        return
-                      }
-                      if (cell.type === 'stall' && cellVendor) {
-                        onSelectStall(isActive ? null : cell)
-                        return
-                      }
-                      if (cell.type === 'stall' && !cellVendor) {
-                        setServiceHint('Bu tezgahta kayıtlı esnaf bulunmuyor.')
-                        window.setTimeout(() => setServiceHint(null), 2800)
-                      }
-                    }}
-                  >
-                    <SchemaCellInner
-                      cell={cell}
-                      vendor={cellVendor}
-                      adminMode={false}
-                      mergedTools={mergedSchemaTools}
-                      is3D={is3D}
-                      iconSize={20}
-                    />
-                    {cell.type === 'stall' &&
-                      selectedFilterProducts.length > 0 &&
-                      cellVendor &&
-                      cellVendor.products.some((pid) => selectedFilterProducts.find((sp) => sp.id === pid)) && (
-                        <div className="here-pin-3d">
-                          <div className="pin-head">
-                            <Icon name="place" size={12} /> Burada
-                          </div>
-                          <div className="pin-stick" />
-                        </div>
-                      )}
-                  </div>
-                )
-              })}
-            </div>
-            )}
-          </TransformComponent>
-        </TransformWrapper>
+      <div className="md-schema-fs__content-row">
+        <div className="schema-fs-body md-schema-fs__body">
+          {layout ? (
+            <SchemaViewport
+              layout={layout.canvas || layout}
+              is3D={is3D}
+              vendors={vendors}
+              selectedFilterProducts={selectedFilterProducts}
+              selectedStall={selectedStall}
+              onSelectStall={onSelectStall}
+              mergedSchemaTools={mergedSchemaTools}
+              onTartiHint={() => {
+                setServiceHint('Tartı noktası — tartım için buraya başvurun.')
+                window.setTimeout(() => setServiceHint(null), 3200)
+              }}
+              onEmptyStallHint={() => {
+                setServiceHint('Bu tezgahta kayıtlı esnaf bulunmuyor.')
+                window.setTimeout(() => setServiceHint(null), 2800)
+              }}
+            />
+          ) : (
+            <div className="schema-fs-loading">Yükleniyor...</div>
+          )}
+        </div>
+
+        <div className={`schema-fs-sidebar ${showMobileList ? 'show-mobile' : ''}`}>
+          <PazarListesi
+            isOpen={true}
+            onToggle={() => setShowMobileList(false)}
+            city={city}
+            selectedItems={shopList || []}
+            setSelectedItems={setShopList || (() => {})}
+            catalogMarkets={marketsCatalog}
+            catalogProducts={productsCatalog}
+            miniMode={true}
+            miniMarketId={marketId}
+            onSelectStall={onSelectStall}
+          />
+        </div>
       </div>
       <StallBottomSheet
         selectedStall={selectedStall}
@@ -260,6 +254,7 @@ export default function MarketDetailSchemaModal({
         onClose={() => onSelectStall(null)}
         onComplaint={onComplaintFromStall}
       />
+      </SchemaErrorBoundary>
     </div>
   )
 }

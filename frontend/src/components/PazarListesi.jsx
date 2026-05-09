@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback } from 'react'
-import { products as defaultProducts, markets as defaultMarkets, getMarketPrices } from '../data/markets'
+import { products as defaultProducts, markets as defaultMarkets, getMarketPrices, vendors } from '../data/markets'
 import { aiOptimizeBudget } from '../api/pazarApi'
 import { exportShoppingListImage } from '../utils/listExport'
 import { getProductIconName } from '../utils/productIcon.js'
@@ -14,6 +14,9 @@ export default function PazarListesi({
   catalogMarkets,
   catalogProducts,
   onNavigateToMarketSchema,
+  miniMode = false,
+  miniMarketId = null,
+  onSelectStall,
 }) {
   const products = catalogProducts && catalogProducts.length ? catalogProducts : defaultProducts
   const markets = catalogMarkets && catalogMarkets.length ? catalogMarkets : defaultMarkets
@@ -35,6 +38,7 @@ export default function PazarListesi({
   const [budgetDraftItems, setBudgetDraftItems] = useState([])
 
   const [exporting, setExporting] = useState(false)
+  const [expandedVendorItem, setExpandedVendorItem] = useState(null)
 
   const categories = ['Tümü', 'Sebze', 'Meyve', 'Süt Ürünü', 'Diğer']
 
@@ -47,7 +51,16 @@ export default function PazarListesi({
   })
 
   const cityMarkets = useMemo(() => {
-    const mks = markets.filter((m) => m.city === city)
+    let mks = markets.filter((m) => m.city === city)
+    
+    // Ensure current market is included in miniMode even if city differs
+    if (miniMode && miniMarketId) {
+      const currentMarket = markets.find((m) => m.id === miniMarketId)
+      if (currentMarket && !mks.some((m) => m.id === miniMarketId)) {
+        mks = [...mks, currentMarket]
+      }
+    }
+
     return mks
       .map((m) => {
         const prices = getMarketPrices(m.id)
@@ -56,15 +69,21 @@ export default function PazarListesi({
           const p = prices.find((pr) => pr.id === item.productId)
           const subtypeMultiplier =
             item.name !== item.parentName ? 1 + (((item.name.length * 7) % 20) - 10) / 100 : 1
-          const price = p ? (parseFloat(p.medianPrice) * subtypeMultiplier).toFixed(1) : '?'
-          const lineTotal = p ? parseFloat(price) * item.qty : 0
+          let price = p ? (parseFloat(p.medianPrice) * subtypeMultiplier).toFixed(1) : '?'
+          
+          // Use vendor price if selected for this market in miniMode
+          if (miniMode && m.id === miniMarketId && item.selectedVendor && item.selectedVendor.price) {
+            price = item.selectedVendor.price
+          }
+          
+          const lineTotal = price !== '?' ? parseFloat(price) * item.qty : 0
           total += lineTotal
           return { ...item, price, lineTotal: lineTotal.toFixed(2) }
         })
         return { ...m, itemPrices, total: total.toFixed(2) }
       })
       .sort((a, b) => parseFloat(a.total) - parseFloat(b.total))
-  }, [selectedItems, city, markets])
+  }, [selectedItems, city, markets, miniMode, miniMarketId])
 
   const cheapestMarket = cityMarkets[0]
 
@@ -195,7 +214,7 @@ export default function PazarListesi({
         ? cityMarkets.find((m) => m.id === selectedMarketId)
         : cheapestMarket
     const rows = selectedItems.map((item) => {
-      const priceInfo = marketForRows?.itemPrices.find((ip) => ip.key === item.key)
+      const priceInfo = marketForRows?.itemPrices?.find((ip) => ip.key === item.key)
       const left = `${item.name} × ${item.qty} ${item.unit === 'kg' ? 'kg' : 'ad'}`
       const right = priceInfo?.lineTotal != null ? `₺${priceInfo.lineTotal}` : '—'
       return { left, right }
@@ -231,7 +250,7 @@ export default function PazarListesi({
 
   return (
     <aside
-      className={`pazar-listesi-sidebar ${collapsed ? 'pazar-listesi-sidebar--collapsed' : ''}`}
+      className={`pazar-listesi-sidebar ${collapsed ? 'pazar-listesi-sidebar--collapsed' : ''} ${miniMode ? 'pazar-listesi--mini' : ''}`}
       aria-label="Alışveriş listesi paneli"
     >
       <button
@@ -261,6 +280,7 @@ export default function PazarListesi({
                 {selectedItems.length} ürün · {selectedItems.filter((i) => i.checked).length} tamamlandı
               </p>
             </div>
+            {miniMode ? null : (
             <button
               type="button"
               className="pazar-listesi-close"
@@ -269,8 +289,10 @@ export default function PazarListesi({
             >
               <Icon name="close" size={20} />
             </button>
+            )}
           </header>
 
+          {miniMode ? null : (
           <nav className="pazar-listesi-steps" aria-label="Liste adımları">
             <button
               type="button"
@@ -295,9 +317,10 @@ export default function PazarListesi({
               Bütçe planı
             </button>
           </nav>
+          )}
 
           <div className="pazar-listesi-body">
-            {step === 'pick' && (
+            {(step === 'pick' && !miniMode) && (
               <>
                 <label className="sr-only" htmlFor="pl-search">
                   Ürün ara
@@ -371,7 +394,7 @@ export default function PazarListesi({
               </>
             )}
 
-            {step === 'compare' && selectedItems.length === 0 && (
+            {(step === 'compare' || miniMode) && selectedItems.length === 0 && (
               <div className="pl-empty">
                 <Icon name="shopping_cart" size={48} className="pl-empty-icon" label="" />
                 <p className="pl-empty-title">Listeniz boş</p>
@@ -379,8 +402,9 @@ export default function PazarListesi({
               </div>
             )}
 
-            {step === 'compare' && selectedItems.length > 0 && (
+            {(step === 'compare' || miniMode) && selectedItems.length > 0 && (
               <>
+                {miniMode ? null : (
                 <div className="pl-toolbar-inline">
                   <button
                     type="button"
@@ -400,6 +424,7 @@ export default function PazarListesi({
                     <Icon name="pin_drop" size={18} /> Tek pazar
                   </button>
                 </div>
+                )}
 
                 {viewMode === 'single' && (
                   <label className="pl-field">
@@ -419,66 +444,90 @@ export default function PazarListesi({
                   </label>
                 )}
 
-                <label className="pl-field">
-                  <span className="pl-field-label">Listede ara</span>
-                  <input
-                    type="search"
-                    className="pazar-listesi-input"
-                    placeholder="Ürün adı ile süz"
-                    value={listFilter}
-                    onChange={(e) => setListFilter(e.target.value)}
-                  />
-                </label>
-
                 <div className="pl-section-label">Satırlar</div>
                 <ul className="pl-lines">
                   {filteredSelectedForCompare.map((item) => {
-                    const marketData =
-                      viewMode === 'single' && selectedMarketId
-                        ? cityMarkets.find((m) => m.id === selectedMarketId)
-                        : cheapestMarket
-                    const priceInfo = marketData?.itemPrices.find((ip) => ip.key === item.key)
+                    const marketData = miniMode
+                        ? cityMarkets.find((m) => m.id === miniMarketId)
+                        : (viewMode === 'single' && selectedMarketId
+                            ? cityMarkets.find((m) => m.id === selectedMarketId)
+                            : cheapestMarket)
+                    const priceInfo = marketData?.itemPrices?.find((ip) => ip.key === item.key)
+                    const itemVendors = vendors ? vendors.filter((v) => v.marketId === miniMarketId && v.products.includes(item.productId)) : []
+                    
+                    const isVendorListExpanded = expandedVendorItem === item.key
+                    
                     return (
-                      <li key={item.key} className={`pl-line ${item.checked ? 'pl-line--done' : ''}`}>
-                        <input
-                          type="checkbox"
-                          checked={item.checked}
-                          onChange={() => toggleChecked(item.key)}
-                          aria-label={`${item.name} alındı`}
-                        />
-                        <div className="pl-line-main">
-                          <div className="pl-line-name">{item.name}</div>
-                          <div className="pl-line-unit">
-                            {priceInfo ? `₺${priceInfo.price} / ${item.unit}` : '—'}
+                      <div key={item.key} className="pl-line-wrapper">
+                        <li className={`pl-line ${item.checked ? 'pl-line--done' : ''}`}>
+                          <input
+                            type="checkbox"
+                            checked={item.checked}
+                            onChange={() => toggleChecked(item.key)}
+                            aria-label={`${item.name} alındı`}
+                          />
+                          <div className="pl-line-main" style={{ cursor: 'pointer' }} onClick={() => setExpandedVendorItem(isVendorListExpanded ? null : item.key)}>
+                            <div className="pl-line-name">
+                              {item.name}
+                              <Icon name={isVendorListExpanded ? "expand_less" : "expand_more"} size={14} />
+                            </div>
+                            <div className="pl-line-unit">
+                              {item.selectedVendor ? `₺${item.selectedVendor.price} / ${item.unit}` : (priceInfo ? `₺${priceInfo.price} / ${item.unit}` : '—')}
+                            </div>
                           </div>
-                        </div>
-                        <input
-                          type="number"
-                          className="pl-qty"
-                          value={item.qty}
-                          onChange={(e) => updateQty(item.key, parseFloat(e.target.value) || 0.5)}
-                          step="0.5"
-                          min="0.5"
-                          aria-label={`${item.name} miktar`}
-                        />
-                        <span className="pl-unit">{item.unit === 'kg' ? 'kg' : 'ad'}</span>
-                        <span className="pl-line-total">
-                          {priceInfo?.lineTotal != null ? `₺${priceInfo.lineTotal}` : '—'}
-                        </span>
-                        <button
-                          type="button"
-                          className="pl-remove"
-                          onClick={() => removeItem(item.key)}
-                          aria-label={`${item.name} kaldır`}
-                        >
-                          <Icon name="delete_outline" size={18} />
-                        </button>
-                      </li>
+                          <input
+                            type="number"
+                            className="pl-qty"
+                            value={item.qty}
+                            onChange={(e) => updateQty(item.key, parseFloat(e.target.value) || 0.5)}
+                            step="0.5"
+                            min="0.5"
+                            aria-label={`${item.name} miktar`}
+                          />
+                          <span className="pl-unit">{item.unit === 'kg' ? 'kg' : 'ad'}</span>
+                          <span className="pl-line-total">
+                            {priceInfo?.lineTotal != null ? `₺${priceInfo.lineTotal}` : '—'}
+                          </span>
+                          <button
+                            type="button"
+                            className="pl-remove"
+                            onClick={() => removeItem(item.key)}
+                            aria-label={`${item.name} kaldır`}
+                          >
+                            <Icon name="delete_outline" size={18} />
+                          </button>
+                        </li>
+                        
+                        {miniMode && isVendorListExpanded && itemVendors.length > 0 && (
+                          <div className="pl-line-vendors">
+                            {itemVendors.map((v) => {
+                              const vPrice = priceInfo ? (parseFloat(priceInfo.price) + ((v.id % 5) - 2)).toFixed(1) : '?'
+                              const isActive = item.selectedVendor?.id === v.id
+                              return (
+                                <button
+                                  key={v.id}
+                                  type="button"
+                                  className={`pl-vendor-btn ${isActive ? 'pl-vendor-btn--active' : ''}`}
+                                  onClick={() => {
+                                    const updatedItems = selectedItems.map((si) =>
+                                      si.key === item.key ? { ...si, selectedVendor: { id: v.id, name: v.name, price: vPrice, stall: v.stall } } : si
+                                    )
+                                    setSelectedItems(updatedItems)
+                                  }}
+                                >
+                                  <Icon name="storefront" size={14} />
+                                  <span>{v.name} ({v.stall}): ₺{vPrice}</span>
+                                </button>
+                              )
+                            })}
+                          </div>
+                        )}
+                      </div>
                     )
                   })}
                 </ul>
 
-                {viewMode === 'all' && (
+                {(!miniMode && viewMode === 'all') && (
                   <>
                     <div className="pl-section-label">Pazar karşılaştırması</div>
                     <ul className="pl-markets">
@@ -502,32 +551,36 @@ export default function PazarListesi({
                   </>
                 )}
 
-                <div className="pl-section-label">Şema ve dışa aktarma</div>
-                <div className="pl-schema-row">
-                  <label className="pl-field pl-field--grow">
-                    <span className="pl-field-label">Haritada gösterilecek pazar</span>
-                    <select
-                      value={schemaMarketId || ''}
-                      onChange={(e) => setSchemaMarketId(Number(e.target.value) || null)}
-                      className="pazar-listesi-select"
-                    >
-                      <option value="">Önerilen (en uygun)</option>
-                      {cityMarkets.map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {m.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <button
-                    type="button"
-                    className="btn-pl-secondary"
-                    onClick={handleSchemaNavigate}
-                    disabled={!productIds.length || !(schemaMarketId || cheapestMarket?.id)}
-                  >
-                    <Icon name="map" size={18} /> Şemada aç
-                  </button>
-                </div>
+                {!miniMode && (
+                  <>
+                    <div className="pl-section-label">Şema ve dışa aktarma</div>
+                    <div className="pl-schema-row">
+                      <label className="pl-field pl-field--grow">
+                        <span className="pl-field-label">Haritada gösterilecek pazar</span>
+                        <select
+                          value={schemaMarketId || ''}
+                          onChange={(e) => setSchemaMarketId(Number(e.target.value) || null)}
+                          className="pazar-listesi-select"
+                        >
+                          <option value="">Önerilen (en uygun)</option>
+                          {cityMarkets.map((m) => (
+                            <option key={m.id} value={m.id}>
+                              {m.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <button
+                        type="button"
+                        className="btn-pl-secondary"
+                        onClick={handleSchemaNavigate}
+                        disabled={!productIds.length || !(schemaMarketId || cheapestMarket?.id)}
+                      >
+                        <Icon name="map" size={18} /> Şemada aç
+                      </button>
+                    </div>
+                  </>
+                )}
                 <button
                   type="button"
                   className="btn-pl-export"
@@ -541,7 +594,7 @@ export default function PazarListesi({
               </>
             )}
 
-            {step === 'budget' && (
+            {(step === 'budget' && !miniMode) && (
               <div>
                 <div className="pl-section-label">Bütçeye uygun ürünler</div>
                 <p className="pl-hint">Öneriyi getir, ürünleri düzenle ve onayla. Onaylananlar ana listen olur.</p>
@@ -624,14 +677,16 @@ export default function PazarListesi({
             )}
           </div>
 
-          {selectedItems.length > 0 && step === 'compare' && (
+          {selectedItems.length > 0 && (step === 'compare' || miniMode) && (
             <footer className="pazar-listesi-footer">
               <div className="pazar-listesi-footer-inner">
                 <div>
                   <div className="pl-footer-cap">
-                    {viewMode === 'single' && selectedMarketId
-                      ? cityMarkets.find((m) => m.id === selectedMarketId)?.name || 'Seçili pazar'
-                      : 'En uygun pazar'}
+                    {miniMode 
+                      ? (cityMarkets.find((m) => m.id === miniMarketId)?.name || 'Seçili pazar')
+                      : (viewMode === 'single' && selectedMarketId
+                          ? cityMarkets.find((m) => m.id === selectedMarketId)?.name || 'Seçili pazar'
+                          : 'En uygun pazar')}
                   </div>
                   <div className="pl-footer-progress">
                     {selectedItems.filter((i) => i.checked).length}/{selectedItems.length} tamamlandı
@@ -639,9 +694,11 @@ export default function PazarListesi({
                 </div>
                 <div className="pl-footer-total">
                   ₺
-                  {viewMode === 'single' && selectedMarketId
-                    ? cityMarkets.find((m) => m.id === selectedMarketId)?.total
-                    : cheapestMarket?.total}
+                  {miniMode
+                    ? cityMarkets.find((m) => m.id === miniMarketId)?.total
+                    : (viewMode === 'single' && selectedMarketId
+                        ? cityMarkets.find((m) => m.id === selectedMarketId)?.total
+                        : cheapestMarket?.total)}
                 </div>
               </div>
             </footer>

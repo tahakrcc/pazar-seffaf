@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useParams, useNavigate, useLocation, useSearchParams } from 'react-router-dom'
 import { markets as mockMarkets, DAYS_TR, getMarketPrices, vendors, products as mockProducts, getMarketSchema, getPriceTrend } from '../data/markets'
+import { kernekMarketCanvas } from '../data/kernekCanvasSchema.js'
 import { parseMarketSchemaPayload } from '../utils/schemaCanvas.js'
-import { fetchMarketPrices, fetchMarketSchema, submitComplaint } from '../api/pazarApi'
+import { fetchMarketPrices, fetchMarketLayout, submitComplaint } from '../api/pazarApi'
 import { getMapsLink, isMarketOpenToday } from '../utils/helpers'
 import { buildCellTypeMap, getWallLineStyle } from '../utils/schemaGrid.js'
 import { getMergedSchemaTools } from '../config/schemaCellTypes.js'
@@ -18,7 +19,9 @@ import MarketDetailComplaintModal from './market-detail/MarketDetailComplaintMod
 import { PRODUCT_CATEGORIES } from './market-detail/constants.js'
 import { isValidPhone, getStallPhoto, vendorInitials } from './market-detail/utils.js'
 
-export default function MarketDetail({ user, addToShopList, marketsCatalog, productsCatalog, daysTrArr }) {
+import PazarListesi from './PazarListesi.jsx'
+
+export default function MarketDetail({ user, addToShopList, shopList, setShopList, city, marketsCatalog, productsCatalog, daysTrArr }) {
   const { id } = useParams()
   const navigate = useNavigate()
   const location = useLocation()
@@ -29,14 +32,14 @@ export default function MarketDetail({ user, addToShopList, marketsCatalog, prod
   const dayLabels = daysTrArr && daysTrArr.length ? daysTrArr : DAYS_TR
   const market = marketsList.find((m) => m.id === Number(id))
   const [prices, setPrices] = useState([])
-  const [schema, setSchema] = useState(null)
+  const [layout, setLayout] = useState(null)
 
   useEffect(() => {
     if (!market) return
     let cancel = false
     ;(async () => {
       try {
-        const [pr, sch] = await Promise.all([fetchMarketPrices(market.id), fetchMarketSchema(market.id)])
+        const [pr, layoutRes] = await Promise.all([fetchMarketPrices(market.id), fetchMarketLayout(market.id)])
         if (cancel) return
         setPrices(
           pr.map((p) => ({
@@ -46,11 +49,12 @@ export default function MarketDetail({ user, addToShopList, marketsCatalog, prod
             maxPrice: Number(p.maxPrice),
           }))
         )
-        setSchema(parseMarketSchemaPayload(sch))
+        const parsedLayout = parseMarketSchemaPayload(layoutRes?.layout)
+        setLayout(parsedLayout?.canvas ? parsedLayout : { canvas: kernekMarketCanvas })
       } catch {
         if (!cancel) {
           setPrices(getMarketPrices(market.id))
-          setSchema(parseMarketSchemaPayload(getMarketSchema(market.id)))
+          setLayout({ canvas: kernekMarketCanvas })
         }
       }
     })()
@@ -100,8 +104,8 @@ export default function MarketDetail({ user, addToShopList, marketsCatalog, prod
 
   const displaySchema = useMemo(() => {
     if (!market) return { cells: [], cols: 5, rows: 5 }
-    return schema ?? getMarketSchema(market.id)
-  }, [market, schema])
+    return getMarketSchema(market.id)
+  }, [market])
 
   const mergedSchemaTools = useMemo(() => getMergedSchemaTools(), [])
   const schemaTypeMap = useMemo(() => buildCellTypeMap(displaySchema.cells), [displaySchema.cells])
@@ -229,7 +233,8 @@ export default function MarketDetail({ user, addToShopList, marketsCatalog, prod
   }
 
   return (
-    <div className="pd-page detail-page">
+    <div className="market-detail-layout">
+      <div className="pd-page detail-page market-detail-content">
       <aside className="pd-sidebar detail-sidebar">
         <MarketDetailHero
           marketName={market.name}
@@ -269,6 +274,11 @@ export default function MarketDetail({ user, addToShopList, marketsCatalog, prod
             getPriceTrend={getPriceTrend}
             marketId={market.id}
             onOpenProduct={openProductCalc}
+            vendors={marketVendors}
+            onGoToStall={(vendorId) => {
+              setSelectedStall({ vendorId }) // Setting just vendorId. The schema modal uses selectedStall.vendorId
+              setShowSchemaModal(true)
+            }}
           />
         )}
 
@@ -279,6 +289,12 @@ export default function MarketDetail({ user, addToShopList, marketsCatalog, prod
             onComplaint={setComplaintVendorId}
             getStallPhoto={getStallPhoto}
             vendorInitials={vendorInitials}
+            productsList={productsList}
+            prices={displayPrices}
+            onGoToStall={(vendorId) => {
+              setSelectedStall({ vendorId })
+              setShowSchemaModal(true)
+            }}
           />
         )}
 
@@ -294,8 +310,7 @@ export default function MarketDetail({ user, addToShopList, marketsCatalog, prod
         is3D={is3D}
         onToggle3D={setIs3D}
         onClose={() => setShowSchemaModal(false)}
-        displaySchema={displaySchema}
-        canvas={displaySchema.canvas}
+        layout={layout}
         vendors={vendors}
         selectedStall={selectedStall}
         onSelectStall={setSelectedStall}
@@ -311,6 +326,12 @@ export default function MarketDetail({ user, addToShopList, marketsCatalog, prod
           setSelectedStall(null)
         }}
         getStallPhoto={getStallPhoto}
+        shopList={shopList}
+        setShopList={setShopList}
+        city={city}
+        marketsCatalog={marketsCatalog}
+        productsCatalog={productsCatalog}
+        marketId={market.id}
       />
 
       {showCalcFor && (
@@ -340,6 +361,22 @@ export default function MarketDetail({ user, addToShopList, marketsCatalog, prod
           onCancel={() => setComplaintVendorId(null)}
         />
       )}
+    </div>
+    
+    <div className="market-detail-sidebar-right">
+      <PazarListesi
+        isOpen={true}
+        onToggle={() => {}}
+        city={city}
+        selectedItems={shopList || []}
+        setSelectedItems={setShopList || (() => {})}
+        catalogMarkets={marketsCatalog}
+        catalogProducts={productsCatalog}
+        miniMode={true}
+        miniMarketId={market.id}
+      />
+    </div>
+
     </div>
   )
 }

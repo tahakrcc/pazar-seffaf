@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   fetchMarkets,
-  fetchMarketSchema,
+  fetchMarketLayout,
   fetchAdminMunicipalities,
   fetchAdminVendors,
   fetchAdminInspections,
@@ -9,15 +9,12 @@ import {
   fetchAdminComplaints,
   postAdminAssignment,
   postAdminMarket,
-  patchAdminSchemaCell,
-  patchAdminMarketCanvas,
+  postAdminMarketLayout,
 } from '../api/pazarApi'
 import Icon from './Icon.jsx'
 import RolePanelLayout from './layout/RolePanelLayout.jsx'
-import SchemaCellInner from './SchemaCellInner.jsx'
 import { addMergedSchemaTool, getMergedSchemaTools } from '../config/schemaCellTypes.js'
-import { buildCellTypeMap, getWallLineStyle, toolSupportsPaint } from '../utils/schemaGrid.js'
-import { parseCanvasField, updateStallVendor } from '../utils/schemaCanvas.js'
+import { normalizeLayout, toBackendLayoutPayload } from '../features/schema/model/layoutModel.js'
 import SchemaCanvasEditor from './SchemaCanvasEditor.jsx'
 import RoleMissionCards from './RoleMissionCards.jsx'
 import RolePanelQuickNav from './RolePanelQuickNav.jsx'
@@ -38,30 +35,20 @@ const ADMIN_QUICK_HINTS = {
   officers: 'Zabıta kullanıcıları ve atama',
 }
 
-function normalizeMapSchema(api) {
-  if (!api || !Array.isArray(api.cells)) {
-    return { cols: api?.cols || 5, rows: api?.rows || 5, cells: [], canvas: null }
-  }
-  const cells = [...api.cells].sort((a, b) => {
-    const pa = String(a.id).split('-').map(Number)
-    const pb = String(b.id).split('-').map(Number)
-    return (pa[0] - pb[0]) || (pa[1] - pb[1])
-  })
-  let canvas = null
-  if (api.canvas != null && api.canvas !== '') {
-    canvas = parseCanvasField(api.canvas)
-  }
-  return {
-    cols: api.cols || 1,
-    rows: api.rows || 1,
-    cells: cells.map((c) => ({
-      id: c.id,
-      type: c.type,
-      stallCode: c.stallCode || null,
-      vendorId: c.vendorId != null ? c.vendorId : null,
-    })),
-    canvas,
-  }
+function normalizeLayoutResponse(api) {
+  return { revision: Number(api?.revision || 0), layout: normalizeLayout(api?.layout) }
+}
+
+function layoutToEditorCanvas(layout) {
+  const normalized = normalizeLayout(layout)
+  return { version: 1, width: normalized.width, height: normalized.height, elements: normalized.nodes }
+}
+
+function editorCanvasToLayout(canvasDraft) {
+  const width = Number(canvasDraft?.width) || 720
+  const height = Number(canvasDraft?.height) || 520
+  const nodes = Array.isArray(canvasDraft?.elements) ? canvasDraft.elements : []
+  return normalizeLayout({ version: 2, width, height, nodes })
 }
 
 function AnimatedNumber({ value, duration = 1000 }) {
@@ -95,19 +82,15 @@ export default function Dashboard({ user, darkMode, setDarkMode }) {
   const [openComplaints, setOpenComplaints] = useState(0)
   const [loadErr, setLoadErr] = useState('')
   const [selectedMarketId, setSelectedMarketId] = useState(null)
-  const [schema, setSchema] = useState({ cols: 5, rows: 5, cells: [], canvas: null })
-  const [schemaLayoutMode, setSchemaLayoutMode] = useState('canvas')
+  const [schemaState, setSchemaState] = useState({ revision: 0, layout: normalizeLayout(null) })
   const [canvasSaving, setCanvasSaving] = useState(false)
   const [editingStall, setEditingStall] = useState(null)
-  const [activeTool, setActiveTool] = useState('empty')
-  const [isPainting, setIsPainting] = useState(false)
   const [schemaToolsRev, setSchemaToolsRev] = useState(0)
   const [customToolDraft, setCustomToolDraft] = useState({ id: '', label: '', icon: 'widgets' })
   const mergedSchemaTools = useMemo(() => {
     void schemaToolsRev
     return getMergedSchemaTools()
   }, [schemaToolsRev])
-  const schemaTypeMap = useMemo(() => buildCellTypeMap(schema.cells), [schema.cells])
   const [newMarket, setNewMarket] = useState({
     municipalityId: null,
     name: '',
@@ -160,11 +143,11 @@ export default function Dashboard({ user, darkMode, setDarkMode }) {
   const loadSchema = useCallback(async (marketId) => {
     if (marketId == null) return
     try {
-      const raw = await fetchMarketSchema(marketId)
-      setSchema(normalizeMapSchema(raw))
+      const raw = await fetchMarketLayout(marketId)
+      setSchemaState(normalizeLayoutResponse(raw))
     } catch (e) {
       setLoadErr(String(e.message || e))
-      setSchema({ cols: 5, rows: 5, cells: [], canvas: null })
+      setSchemaState({ revision: 0, layout: normalizeLayout(null) })
     }
   }, [])
 
@@ -183,41 +166,33 @@ export default function Dashboard({ user, darkMode, setDarkMode }) {
     setSelectedMarketId(mId)
   }
 
-  const applyCellPatch = async (cellId, body) => {
-    if (selectedMarketId == null) return null
-    await patchAdminSchemaCell(selectedMarketId, cellId, body)
-    const raw = await fetchMarketSchema(selectedMarketId)
-    const next = normalizeMapSchema(raw)
-    setSchema(next)
-    return next
-  }
-
   const handleAssignVendor = async (vendorId) => {
     if (!editingStall) return
-    if (editingStall.canvasMode && schema.canvas) {
+    if (selectedMarketId == null) return
+    const nextNodes = schemaState.layout.nodes.map((node) => {
+      if (node.id !== editingStall.id || node.kind !== 'stall') return node
       const v = vendorId == null ? null : vendors.find((x) => x.id === vendorId)
-      let stallCodeArg
-      if (vendorId == null) stallCodeArg = editingStall.stallCode
-      else if (v?.stallCode != null && String(v.stallCode).trim() !== '') stallCodeArg = String(v.stallCode)
-      else stallCodeArg = undefined
-      const nextCanvas = updateStallVendor(schema.canvas, editingStall.id, vendorId, stallCodeArg)
-      try {
-        await patchAdminMarketCanvas(selectedMarketId, JSON.stringify(nextCanvas))
-        const raw = await fetchMarketSchema(selectedMarketId)
-        setSchema(normalizeMapSchema(raw))
-        await refreshAll()
-      } catch (e) {
-        alert(String(e.message || e))
+      const fallbackCode =
+        v?.stallCode != null && String(v.stallCode).trim() !== ''
+          ? String(v.stallCode)
+          : editingStall.stallCode || node.stallCode
+      return {
+        ...node,
+        vendorId: vendorId == null ? null : vendorId,
+        stallCode: fallbackCode || null,
       }
-      setEditingStall(null)
-      return
-    }
-    await applyCellPatch(editingStall.id, {
-      cellType: 'stall',
-      stallCode: editingStall.stallCode,
-      vendorId: vendorId == null ? null : vendorId,
     })
-    await refreshAll()
+    try {
+      await postAdminMarketLayout(
+        selectedMarketId,
+        toBackendLayoutPayload({ ...schemaState.layout, nodes: nextNodes }),
+        schemaState.revision,
+      )
+      await loadSchema(selectedMarketId)
+      await refreshAll()
+    } catch (e) {
+      alert(String(e.message || e))
+    }
     setEditingStall(null)
   }
 
@@ -225,65 +200,15 @@ export default function Dashboard({ user, darkMode, setDarkMode }) {
     if (selectedMarketId == null) return
     setCanvasSaving(true)
     try {
-      await patchAdminMarketCanvas(selectedMarketId, JSON.stringify(nextCanvas))
+      const nextLayout = editorCanvasToLayout(nextCanvas)
+      await postAdminMarketLayout(selectedMarketId, toBackendLayoutPayload(nextLayout), schemaState.revision)
       await loadSchema(selectedMarketId)
-      alert('Tuval kaydedildi.')
+      alert('Yerleşim kaydedildi.')
     } catch (e) {
       alert(String(e.message || e))
     } finally {
       setCanvasSaving(false)
     }
-  }
-
-  const handleClearCanvas = async () => {
-    if (!confirm('Serbest tuval silinsin mi? Kayıtlı kare şema (ızgara) veya boş API hücreleri kullanılır.')) return
-    if (selectedMarketId == null) return
-    setCanvasSaving(true)
-    try {
-      await patchAdminMarketCanvas(selectedMarketId, null)
-      await loadSchema(selectedMarketId)
-      setSchemaLayoutMode('grid')
-    } catch (e) {
-      alert(String(e.message || e))
-    } finally {
-      setCanvasSaving(false)
-    }
-  }
-
-  const handleCellClick = async (cell) => {
-    if (activeTool === 'stall') {
-      if (cell.type !== 'stall') {
-        const code = `T-${Math.floor(Math.random() * 1000)}`
-        const next = await applyCellPatch(cell.id, {
-          cellType: 'stall',
-          stallCode: code,
-          vendorId: null,
-        })
-        const updatedCell = next?.cells.find((c) => c.id === cell.id)
-        setEditingStall(updatedCell || { id: cell.id, type: 'stall', stallCode: code, vendorId: null })
-      } else {
-        setEditingStall(cell)
-      }
-      return
-    }
-    if (cell.type === 'stall' && activeTool === 'empty') {
-      setEditingStall(cell)
-      return
-    }
-    await applyCellPatch(cell.id, {
-      cellType: activeTool,
-      stallCode: null,
-      vendorId: null,
-    })
-  }
-
-  const handleCellPaint = async (cell) => {
-    if (!isPainting || !toolSupportsPaint(activeTool, mergedSchemaTools)) return
-    await applyCellPatch(cell.id, {
-      cellType: activeTool,
-      stallCode: null,
-      vendorId: null,
-    })
   }
 
   const saveNewMarket = async () => {
@@ -485,58 +410,12 @@ export default function Dashboard({ user, darkMode, setDarkMode }) {
                 ))}
               </select>
             </div>
-            <div className="schema-layout-toggle" style={{ marginBottom: 16, display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
-              <span style={{ fontWeight: 800, fontSize: '0.85rem', color: 'var(--text-muted)' }}>Düzenleyici:</span>
-              <button
-                type="button"
-                className={`tool-btn ${schemaLayoutMode === 'grid' ? 'active' : ''}`}
-                onClick={() => setSchemaLayoutMode('grid')}
-              >
-                Izgara (kareli, klasik)
-              </button>
-              <button
-                type="button"
-                className={`tool-btn ${schemaLayoutMode === 'canvas' ? 'active' : ''}`}
-                onClick={() => setSchemaLayoutMode('canvas')}
-              >
-                Serbest tuval (sürükle / döndür)
-              </button>
-              {schemaLayoutMode === 'canvas' && schema.canvas != null && (
-                <button type="button" className="tool-btn" disabled={canvasSaving} onClick={() => void handleClearCanvas()}>
-                  Tuvali kaldır
-                </button>
-              )}
-            </div>
-            {schemaLayoutMode === 'canvas' ? (
-              <SchemaCanvasEditor
-                canvas={schema.canvas}
-                selectedMarketId={selectedMarketId}
-                saving={canvasSaving}
-                vendorsOnMarket={vendorsOnMarket}
-                onSave={(draft) => void handleSaveCanvas(draft)}
-                onRequestEditStall={(el) =>
-                  setEditingStall({
-                    id: el.id,
-                    stallCode: el.stallCode || '',
-                    vendorId: el.vendorId ?? null,
-                    canvasMode: true,
-                  })
-                }
-              />
-            ) : (
-              <>
             <div className="grid-toolbar schema-admin-toolbar">
               {mergedSchemaTools.map((tool) => (
-                <button
-                  key={tool.id}
-                  type="button"
-                  className={`tool-btn ${activeTool === tool.id ? 'active' : ''}`}
-                  onClick={() => setActiveTool(tool.id)}
-                  title={tool.label}
-                >
+                <span key={tool.id} className="tool-btn active" title={tool.label}>
                   <Icon name={tool.icon} size={16} />
                   {tool.label}
-                </button>
+                </span>
               ))}
             </div>
             <div className="schema-custom-tool-row">
@@ -569,13 +448,6 @@ export default function Dashboard({ user, darkMode, setDarkMode }) {
                   try {
                     addMergedSchemaTool(customToolDraft)
                     setSchemaToolsRev((x) => x + 1)
-                    const slug = String(customToolDraft.id || '')
-                      .trim()
-                      .toLowerCase()
-                      .replace(/\s+/g, '_')
-                      .replace(/[^a-z0-9_]/g, '')
-                      .slice(0, 32)
-                    if (slug) setActiveTool(slug)
                     setCustomToolDraft({ id: '', label: '', icon: 'widgets' })
                   } catch (err) {
                     alert(String(err.message || err))
@@ -586,36 +458,22 @@ export default function Dashboard({ user, darkMode, setDarkMode }) {
               </button>
             </div>
             <p style={{ color: 'var(--text-muted)', margin: '16px 0', fontSize: '0.85rem', padding: '0 24px' }}>
-              Duvarlar çizgi segmenti olarak çizilir; giriş ve çıkış duvar hattında boşluk bırakır. Boyama: seçili araçla sürükleyin (tezgâh tıklama ile).
+              Tek layout modeli kullanılır. Burada yaptığınız değişiklik aynı veriyle hem 2D hem 3D görünümde çalışır.
             </p>
-            <div className="schema-grid-wrapper" onMouseLeave={() => setIsPainting(false)}>
-              <div
-                className="schema-grid"
-                style={{ gridTemplateColumns: `repeat(${schema.cols}, 1fr)` }}
-                onMouseDown={() => setIsPainting(true)}
-                onMouseUp={() => setIsPainting(false)}
-              >
-                {schema.cells.map((cell) => {
-                  const vendor = cell.vendorId ? vendors.find((v) => v.id === cell.vendorId) : null
-                  const wallStyle = cell.type === 'wall' ? getWallLineStyle(cell.id, schemaTypeMap) : undefined
-                  const typeSafe = String(cell.type).replace(/[^a-zA-Z0-9_-]/g, '_')
-                  return (
-                    <div
-                      key={cell.id}
-                      role="presentation"
-                      className={`grid-cell cell-${typeSafe} ${vendor ? 'has-vendor' : ''}`}
-                      style={wallStyle}
-                      onClick={() => handleCellClick(cell)}
-                      onMouseOver={() => handleCellPaint(cell)}
-                    >
-                      <SchemaCellInner cell={cell} vendor={vendor} adminMode mergedTools={mergedSchemaTools} />
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-              </>
-            )}
+            <SchemaCanvasEditor
+              canvas={layoutToEditorCanvas(schemaState.layout)}
+              selectedMarketId={selectedMarketId}
+              saving={canvasSaving}
+              vendorsOnMarket={vendorsOnMarket}
+              onSave={(draft) => void handleSaveCanvas(draft)}
+              onRequestEditStall={(el) =>
+                setEditingStall({
+                  id: el.id,
+                  stallCode: el.stallCode || '',
+                  vendorId: el.vendorId ?? null,
+                })
+              }
+            />
           </div>
         )}
 

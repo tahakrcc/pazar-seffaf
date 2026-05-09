@@ -2,8 +2,6 @@ package com.pazarsaffaf.service;
 
 import com.pazarsaffaf.market.Market;
 import com.pazarsaffaf.market.MarketRepository;
-import com.pazarsaffaf.market.MarketSchemaCell;
-import com.pazarsaffaf.market.MarketSchemaCellRepository;
 import com.pazarsaffaf.pricing.Product;
 import com.pazarsaffaf.pricing.VendorProduct;
 import com.pazarsaffaf.pricing.VendorProductRepository;
@@ -12,7 +10,6 @@ import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -25,7 +22,6 @@ import org.springframework.transaction.annotation.Transactional;
 public class PublicMarketService {
 
     private final MarketRepository marketRepository;
-    private final MarketSchemaCellRepository marketSchemaCellRepository;
     private final VendorProductRepository vendorProductRepository;
 
     @Transactional(readOnly = true)
@@ -39,43 +35,6 @@ public class PublicMarketService {
     @Transactional(readOnly = true)
     public Market getMarket(Long id) {
         return marketRepository.findById(id).orElseThrow();
-    }
-
-    @Transactional(readOnly = true)
-    public Map<String, Object> mapSchema(Long marketId) {
-        Market market = marketRepository.findById(marketId).orElseThrow();
-        List<MarketSchemaCell> cells = marketSchemaCellRepository.findById_MarketId(marketId);
-        int minR = Integer.MAX_VALUE;
-        int maxR = Integer.MIN_VALUE;
-        int minC = Integer.MAX_VALUE;
-        int maxC = Integer.MIN_VALUE;
-        List<Map<String, Object>> outCells = new ArrayList<>();
-        for (MarketSchemaCell sc : cells) {
-            String[] parts = sc.getId().getCellId().split("-");
-            int r = Integer.parseInt(parts[0]);
-            int c = Integer.parseInt(parts[1]);
-            minR = Math.min(minR, r);
-            maxR = Math.max(maxR, r);
-            minC = Math.min(minC, c);
-            maxC = Math.max(maxC, c);
-            Map<String, Object> m = new HashMap<>();
-            m.put("id", sc.getId().getCellId());
-            m.put("type", sc.getCellType());
-            m.put("stallCode", sc.getStallCode());
-            m.put("vendorId", sc.getVendor() != null ? sc.getVendor().getId() : null);
-            outCells.add(m);
-        }
-        int cols = maxC >= minC ? maxC - minC + 1 : 1;
-        int rows = maxR >= minR ? maxR - minR + 1 : 1;
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("cols", cols);
-        result.put("rows", rows);
-        result.put("cells", outCells);
-        String canvasJson = market.getSchemaCanvasJson();
-        if (canvasJson != null && !canvasJson.isBlank()) {
-            result.put("canvas", canvasJson);
-        }
-        return result;
     }
 
     @Transactional(readOnly = true)

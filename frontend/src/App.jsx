@@ -15,7 +15,10 @@ import ZabitaPanel from './components/ZabitaPanel'
 import ChiefPanel from './components/ChiefPanel'
 import PazarListesi from './components/PazarListesi'
 import Icon from './components/Icon'
+import ElderHome from './components/ElderHome.jsx'
 import AppShell from './components/layout/AppShell.jsx'
+import AppSettingsModal, { loadSimpleMode, saveSimpleMode } from './components/AppSettingsModal.jsx'
+import AkisPage from './pages/AkisPage.jsx'
 
 const CITIES = ['Malatya', 'İstanbul', 'Ankara', 'İzmir', 'Bursa', 'Antalya', 'Adana', 'Gaziantep', 'Konya']
 
@@ -47,6 +50,8 @@ export default function App() {
   const [marketSearch, setMarketSearch] = useState('')
   const [user, setUser] = useState({ name: 'Vatandaş', role: 'Vatandaş' })
   const [darkMode, setDarkMode] = useState(false)
+  const [simpleMode, setSimpleMode] = useState(loadSimpleMode)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const [shopList, setShopList] = useState(loadShopList)
   const [showSmartList, setShowSmartList] = useState(false)
   const [marketsCatalog, setMarketsCatalog] = useState(mockMarkets)
@@ -68,6 +73,14 @@ export default function App() {
   useEffect(() => {
     document.documentElement.classList.toggle('dark', darkMode)
   }, [darkMode])
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('simple-mode', simpleMode)
+  }, [simpleMode])
+
+  useEffect(() => {
+    saveSimpleMode(simpleMode)
+  }, [simpleMode])
 
   useEffect(() => {
     try { localStorage.setItem(SHOP_KEY, JSON.stringify(shopList)) } catch { /* ignore */ }
@@ -140,6 +153,7 @@ export default function App() {
 
   const isLogin = location.pathname === '/login' || location.pathname === '/login/'
   const isPortalPath = location.pathname === '/portal' || location.pathname === '/portal/'
+  const isAkis = location.pathname === '/akis' || location.pathname === '/akis/'
   const isDetail = location.pathname.startsWith('/market/')
   const isPanelRoute = location.pathname.startsWith('/panel/')
 
@@ -155,7 +169,7 @@ export default function App() {
     )
   }
 
-  if (showSplash) {
+  if (showSplash && !isAkis) {
     return (
       <div className="splash-screen">
         <img src="/logo.png" alt="Pazar Şeffaf Logo" className="splash-logo-img" />
@@ -165,7 +179,7 @@ export default function App() {
     )
   }
 
-  if (!hasSelectedCity && !isDetail && !isLogin && !isPanelRoute && !isPortalPath) {
+  if (!hasSelectedCity && !isDetail && !isLogin && !isPanelRoute && !isPortalPath && !isAkis) {
     return (
       <div className="welcome-screen">
         <main className="welcome-card">
@@ -210,6 +224,10 @@ export default function App() {
               <Icon name="my_location" size={20} aria-hidden />
               Konumuma göre seç
             </button>
+            <p className="welcome-settings-hint">
+              İlinizi sonra değiştirmek için ana ekrandan <strong>Ayarlar</strong> menüsünü kullanabilirsiniz. Orada{' '}
+              <strong>Basit mod</strong> (büyük yazı ve düğmeler) da vardır.
+            </p>
           </div>
         </main>
       </div>
@@ -218,7 +236,8 @@ export default function App() {
 
   return (
     <Routes>
-      <Route path="/market/:id" element={<MarketDetail user={user} addToShopList={addToShopList} marketsCatalog={marketsCatalog} productsCatalog={productsCatalog} daysTrArr={daysTr} />} />
+      <Route path="/akis" element={<AkisPage />} />
+      <Route path="/market/:id" element={<MarketDetail user={user} addToShopList={addToShopList} shopList={shopList} setShopList={setShopList} city={city} marketsCatalog={marketsCatalog} productsCatalog={productsCatalog} daysTrArr={daysTr} />} />
       <Route
         path="/portal"
         element={
@@ -286,12 +305,21 @@ export default function App() {
       />
       <Route path="/dashboard" element={<Navigate to={getPanelPathForRole(user?.role)} replace />} />
       <Route path="*" element={
-          <AppShell
+        <>
+          <AppSettingsModal
+            open={settingsOpen}
+            onClose={() => setSettingsOpen(false)}
             city={city}
-            panelHref={getPanelPathForRole(user?.role)}
+            cities={CITIES}
+            setCity={setCity}
+            setHasSelectedCity={setHasSelectedCity}
+            simpleMode={simpleMode}
+            setSimpleMode={setSimpleMode}
             darkMode={darkMode}
-            onToggleTheme={() => setDarkMode(!darkMode)}
-            onChangeCity={() => setHasSelectedCity(false)}
+            setDarkMode={setDarkMode}
+          />
+          <AppShell
+            onOpenSettings={() => setSettingsOpen(true)}
             weather={{
               temp: weatherInfo.temp,
               desc: weatherInfo.desc,
@@ -299,33 +327,53 @@ export default function App() {
               tip: weatherInfo.tip,
             }}
           >
-            <section className="section-header" aria-label="Pazar ara">
-              <input
-                type="search"
-                className="search-input"
-                placeholder="Pazar adı veya ilçe ara"
-                value={marketSearch}
-                onChange={(e) => setMarketSearch(e.target.value)}
+            {simpleMode ? (
+              <ElderHome
+                city={city}
+                marketSearch={marketSearch}
+                setMarketSearch={setMarketSearch}
+                viewMode={viewMode}
+                setViewMode={setViewMode}
+                withDistance={withDistance}
+                openMarkets={openMarkets}
+                closedMarkets={closedMarkets}
+                daysTr={daysTr}
+                onOpenSettings={() => setSettingsOpen(true)}
+                onOpenShopList={() => setShowSmartList(true)}
+                shopListCount={shopList.length}
+                onOpenMarket={(id) => navigate(`/market/${id}`)}
               />
-            </section>
-
-            {viewMode === 'map' ? (
-              <MapView markets={withDistance} userLoc={userLoc} onMarketClick={id => navigate(`/market/${id}`)} />
-            ) : openMarkets.length === 0 && closedMarkets.length === 0 ? (
-              <div className="home-empty-state" role="status">
-                <p className="home-empty-title">Bu aramaya uygun pazar yok</p>
-                <p className="home-empty-hint">Farklı bir anahtar kelime veya ilçe adı deneyin; aramayı temizleyerek tüm pazarları görebilirsiniz.</p>
-                {marketSearch.trim() ? (
-                  <button type="button" className="home-empty-clear" onClick={() => setMarketSearch('')}>
-                    Aramayı temizle
-                  </button>
-                ) : null}
-              </div>
             ) : (
-              <div className="market-cards-container">
-                {openMarkets.map((m) => <MarketCard key={m.id} market={m} isOpen daysTrArr={daysTr} />)}
-                {closedMarkets.map((m) => <MarketCard key={m.id} market={m} isOpen={false} daysTrArr={daysTr} />)}
-              </div>
+              <>
+                <section className="section-header" aria-label="Pazar ara">
+                  <input
+                    type="search"
+                    className="search-input"
+                    placeholder="Pazar adı veya ilçe ara"
+                    value={marketSearch}
+                    onChange={(e) => setMarketSearch(e.target.value)}
+                  />
+                </section>
+
+                {viewMode === 'map' ? (
+                  <MapView markets={withDistance} userLoc={userLoc} onMarketClick={id => navigate(`/market/${id}`)} />
+                ) : openMarkets.length === 0 && closedMarkets.length === 0 ? (
+                  <div className="home-empty-state" role="status">
+                    <p className="home-empty-title">Bu aramaya uygun pazar yok</p>
+                    <p className="home-empty-hint">Farklı bir anahtar kelime veya ilçe adı deneyin; aramayı temizleyerek tüm pazarları görebilirsiniz.</p>
+                    {marketSearch.trim() ? (
+                      <button type="button" className="home-empty-clear" onClick={() => setMarketSearch('')}>
+                        Aramayı temizle
+                      </button>
+                    ) : null}
+                  </div>
+                ) : (
+                  <div className="market-cards-container">
+                    {openMarkets.map((m) => <MarketCard key={m.id} market={m} isOpen daysTrArr={daysTr} />)}
+                    {closedMarkets.map((m) => <MarketCard key={m.id} market={m} isOpen={false} daysTrArr={daysTr} />)}
+                  </div>
+                )}
+              </>
             )}
 
             <button
@@ -363,6 +411,7 @@ export default function App() {
               }}
             />
           </AppShell>
+        </>
       } />
     </Routes>
   )

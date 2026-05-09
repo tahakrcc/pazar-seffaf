@@ -1,4 +1,3 @@
-import Icon from './Icon.jsx'
 import SchemaCellInner from './SchemaCellInner.jsx'
 import { normalizeCanvas, vendorForCanvasStall } from '../utils/schemaCanvas.js'
 
@@ -32,7 +31,7 @@ export default function SchemaCanvasViewer({
             preserveAspectRatio="xMidYMid meet"
           >
             <rect width={cw} height={ch} fill="var(--schema-floor, #e8eef5)" />
-            {walls.map((w) => (
+            {!is3D && walls.map((w) => (
               <line
                 key={w.id}
                 x1={w.x1}
@@ -48,6 +47,32 @@ export default function SchemaCanvasViewer({
             ))}
           </svg>
           <div className="schema-canvas-view__html">
+            {is3D && walls.map((w) => {
+              const dx = w.x2 - w.x1
+              const dy = w.y2 - w.y1
+              const len = Math.sqrt(dx * dx + dy * dy)
+              const angle = Math.atan2(dy, dx) * (180 / Math.PI)
+              const cx = (w.x1 + w.x2) / 2
+              const cy = (w.y1 + w.y2) / 2
+              const cxPct = (cx / cw) * 100
+              const cyPct = (cy / ch) * 100
+              const widthPct = (len / cw) * 100
+              
+              return (
+                <div 
+                  key={w.id} 
+                  className="schema-canvas-abs wall-3d"
+                  style={{
+                    left: `${cxPct}%`,
+                    top: `${cyPct}%`,
+                    width: `${widthPct}%`,
+                    height: `${(w.thickness || 4) / ch * 100}%`,
+                    transform: `translate(-50%, -50%) rotate(${angle}deg)`,
+                  }}
+                />
+              )
+            })}
+
             {boxes.map((el) => {
               const cxPct = ((el.x + el.w / 2) / cw) * 100
               const cyPct = ((el.y + el.h / 2) / ch) * 100
@@ -61,13 +86,15 @@ export default function SchemaCanvasViewer({
 
               if (el.kind === 'stall') {
                 const cellVendor = vendorForCanvasStall(el, vendors)
-                const hasProduct =
-                  selectedFilterProducts.length > 0 &&
-                  cellVendor &&
-                  cellVendor.products?.some((pid) =>
-                    selectedFilterProducts.find((sp) => sp.id === pid)
-                  )
-                const isDimmed = selectedFilterProducts.length > 0 && !hasProduct
+                const filterOn = selectedFilterProducts.length > 0
+                const hasProduct = Boolean(
+                  filterOn &&
+                    cellVendor &&
+                    cellVendor.products?.some((pid) =>
+                      selectedFilterProducts.find((sp) => Number(sp.id) === Number(pid)),
+                    ),
+                )
+                const isDimmed = filterOn && !hasProduct
                 const isActive = selectedStall && selectedStall.id === el.id
                 const syntheticCell = {
                   type: 'stall',
@@ -79,7 +106,7 @@ export default function SchemaCanvasViewer({
                   <div
                     key={el.id}
                     role="presentation"
-                    className={`schema-canvas-abs grid-cell cell-${typeSafe} canvas-hit ${cellVendor ? 'has-vendor' : ''} ${isDimmed ? 'dimmed' : ''} ${isActive ? 'active' : ''}`}
+                    className={`schema-canvas-abs grid-cell cell-${typeSafe} canvas-hit ${cellVendor ? 'has-vendor' : ''} ${isDimmed ? 'dimmed' : ''} ${isActive ? 'active' : ''} ${hasProduct ? 'stall-filter-hit' : ''}`}
                     style={{
                       left: `${cxPct}%`,
                       top: `${cyPct}%`,
@@ -104,18 +131,11 @@ export default function SchemaCanvasViewer({
                       is3D={is3D}
                       iconSize={20}
                     />
-                    {selectedFilterProducts.length > 0 &&
-                      cellVendor &&
-                      cellVendor.products?.some((pid) =>
-                        selectedFilterProducts.find((sp) => sp.id === pid)
-                      ) && (
-                        <div className="here-pin-3d">
-                          <div className="pin-head">
-                            <Icon name="place" size={12} /> Burada
-                          </div>
-                          <div className="pin-stick" />
-                        </div>
-                      )}
+                    {hasProduct ? (
+                      <div className="stall-filter-hit-badge" aria-hidden>
+                        Ürün burada
+                      </div>
+                    ) : null}
                   </div>
                 )
               }

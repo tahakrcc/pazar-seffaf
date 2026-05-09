@@ -13,8 +13,8 @@ export async function fetchMarketPrices(id) {
   return apiGet(`/api/v1/markets/${id}/prices`);
 }
 
-export async function fetchMarketSchema(id) {
-  return apiGet(`/api/v1/markets/${id}/map-schema`);
+export async function fetchMarketLayout(id) {
+  return apiGet(`/api/v1/markets/${id}/layout`);
 }
 
 export async function fetchMarketVendors(marketId) {
@@ -170,14 +170,8 @@ export async function postAdminMarket(body) {
   return apiPost('/api/v1/admin/markets', body);
 }
 
-export async function patchAdminSchemaCell(marketId, cellId, body) {
-  const enc = encodeURIComponent(cellId);
-  return apiPatch(`/api/v1/admin/markets/${marketId}/schema/cells/${enc}`, body);
-}
-
-/** Serbest tuval JSON metni; canvasJson null ile tuval kaldırılır (yalnız ızgara). POST kullanır (PATCH/proxy uyumu). */
-export async function patchAdminMarketCanvas(marketId, canvasJson) {
-  return apiPost(`/api/v1/admin/markets/${marketId}/map-schema/canvas`, { canvasJson });
+export async function postAdminMarketLayout(marketId, layout, revision) {
+  return apiPost(`/api/v1/admin/markets/${marketId}/layout`, { layout, revision });
 }
 
 export async function postAdminAssignVendor(vendorId, marketId) {
@@ -188,7 +182,7 @@ export const publicApi = {
   fetchMarkets,
   fetchMarket,
   fetchMarketPrices,
-  fetchMarketSchema,
+  fetchMarketLayout,
   fetchProducts,
   fetchNotifications,
   fetchWeather,
@@ -231,7 +225,6 @@ export const adminApi = {
   fetchAdminComplaints,
   postAdminAssignment,
   postAdminMarket,
-  patchAdminSchemaCell,
-  patchAdminMarketCanvas,
+  postAdminMarketLayout,
   postAdminAssignVendor,
 }

@@ -10,10 +10,8 @@ import com.pazarsaffaf.iam.UserRole;
 import com.pazarsaffaf.inspection.Inspection;
 import com.pazarsaffaf.inspection.InspectionRepository;
 import com.pazarsaffaf.market.Market;
-import com.pazarsaffaf.market.MarketCellId;
+import com.pazarsaffaf.market.MarketLayoutService;
 import com.pazarsaffaf.market.MarketRepository;
-import com.pazarsaffaf.market.MarketSchemaCell;
-import com.pazarsaffaf.market.MarketSchemaCellRepository;
 import com.pazarsaffaf.market.Municipality;
 import com.pazarsaffaf.market.MunicipalityRepository;
 import com.pazarsaffaf.market.Vendor;
@@ -29,7 +27,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -44,7 +41,7 @@ public class AdminApiController {
 
     private final MunicipalityRepository municipalityRepository;
     private final MarketRepository marketRepository;
-    private final MarketSchemaCellRepository marketSchemaCellRepository;
+    private final MarketLayoutService marketLayoutService;
     private final VendorRepository vendorRepository;
     private final AuditLogRepository auditLogRepository;
     private final InspectionRepository inspectionRepository;
@@ -185,69 +182,23 @@ public class AdminApiController {
         return Map.of("complaintId", c.getId(), "assignedOfficerId", officer.getId());
     }
 
-    @PatchMapping("/markets/{marketId}/schema/cells/{cellId}")
+    public record LayoutUpdateRequest(@NotNull Map<String, Object> layout, Long revision) {}
+
+    @PostMapping("/markets/{marketId}/layout")
     @Transactional
-    public Map<String, Object> patchCell(
-            @AuthenticationPrincipal com.pazarsaffaf.iam.AppUser admin,
-            @PathVariable Long marketId,
-            @PathVariable String cellId,
-            @RequestBody Map<String, Object> body) {
-        Market market = marketRepository.findById(marketId).orElseThrow();
-        MarketCellId id = new MarketCellId(marketId, cellId);
-        MarketSchemaCell cell = marketSchemaCellRepository.findById(id).orElseGet(() -> new MarketSchemaCell(market, cellId, "empty", null, null));
-        if (body.containsKey("cellType") && body.get("cellType") != null) {
-            cell.setCellType(String.valueOf(body.get("cellType")));
-        }
-        if (body.containsKey("stallCode")) {
-            Object sc = body.get("stallCode");
-            cell.setStallCode(sc != null ? String.valueOf(sc) : null);
-        }
-        if (body.containsKey("vendorId")) {
-            Object vid = body.get("vendorId");
-            if (vid == null) {
-                cell.setVendor(null);
-            } else {
-                long vendorPk = ((Number) vid).longValue();
-                Vendor v = vendorRepository.findById(vendorPk).orElseThrow();
-                cell.setVendor(v);
-            }
-        }
-        marketSchemaCellRepository.save(cell);
-        audit(admin, "SCHEMA_PATCH", "market_cell", marketId + ":" + cellId);
-        return Map.of("ok", true);
-    }
-
-    /** Serbest tuval şeması (JSON metin); canvasJson null ise sütun silinir ve yalnız ızgara şema kullanılır. */
-    public record SchemaCanvasPatchRequest(String canvasJson) {}
-
-    private Map<String, Object> persistMarketCanvas(AppUser admin, Long marketId, String canvasJson) {
-        Market market = marketRepository.findById(marketId).orElseThrow();
-        market.setSchemaCanvasJson(canvasJson);
-        marketRepository.save(market);
-        audit(admin, "SCHEMA_CANVAS_PATCH", "market", String.valueOf(marketId));
-        return Map.of("ok", true);
-    }
-
-    @PatchMapping("/markets/{marketId}/schema/canvas")
-    @Transactional
-    public Map<String, Object> patchSchemaCanvas(
+    public Map<String, Object> saveLayout(
             @AuthenticationPrincipal AppUser admin,
             @PathVariable Long marketId,
-            @RequestBody SchemaCanvasPatchRequest req) {
-        return persistMarketCanvas(admin, marketId, req.canvasJson());
-    }
-
-    /**
-     * Tuval kaydı (POST): public GET {@code /api/v1/markets/{id}/map-schema} ile aynı isim uzayı.
-     * Bazı ortamlarda PATCH isteği veya eski sürüm eşlemesi sorun çıkarabildiği için öncelikli kayıt yolu.
-     */
-    @PostMapping("/markets/{marketId}/map-schema/canvas")
-    @Transactional
-    public Map<String, Object> postMapSchemaCanvas(
-            @AuthenticationPrincipal AppUser admin,
-            @PathVariable Long marketId,
-            @RequestBody SchemaCanvasPatchRequest req) {
-        return persistMarketCanvas(admin, marketId, req.canvasJson());
+            @RequestBody LayoutUpdateRequest req) {
+        long expectedRevision = req.revision() == null ? 0L : req.revision();
+        try {
+            Map<String, Object> updated =
+                    marketLayoutService.upsertLayout(marketId, req.layout(), expectedRevision, admin != null ? admin.getEmail() : "system");
+            audit(admin, "LAYOUT_SAVE", "market_layout", String.valueOf(marketId));
+            return updated;
+        } catch (IllegalStateException ex) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, ex.getMessage());
+        }
     }
 
     public record AssignVendorRequest(@NotNull Long vendorId, @NotNull Long marketId) {}

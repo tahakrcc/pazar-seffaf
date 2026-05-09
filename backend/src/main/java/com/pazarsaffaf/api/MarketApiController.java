@@ -4,6 +4,7 @@ import com.pazarsaffaf.market.Market;
 import com.pazarsaffaf.market.Vendor;
 import com.pazarsaffaf.market.VendorRepository;
 import com.pazarsaffaf.pricing.PriceObservationRepository;
+import com.pazarsaffaf.market.MarketLayoutService;
 import com.pazarsaffaf.service.PublicMarketService;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
@@ -24,6 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class MarketApiController {
 
     private final PublicMarketService publicMarketService;
+    private final MarketLayoutService marketLayoutService;
     private final PriceObservationRepository priceObservationRepository;
     private final VendorRepository vendorRepository;
 
@@ -37,9 +39,9 @@ public class MarketApiController {
         return toDto(publicMarketService.getMarket(id));
     }
 
-    @GetMapping("/{id}/map-schema")
-    public Map<String, Object> schema(@PathVariable Long id) {
-        return publicMarketService.mapSchema(id);
+    @GetMapping("/{id}/layout")
+    public Map<String, Object> layout(@PathVariable Long id) {
+        return marketLayoutService.getLayout(id);
     }
 
     @GetMapping("/{id}/prices")

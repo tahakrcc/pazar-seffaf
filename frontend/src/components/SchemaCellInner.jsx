@@ -22,6 +22,7 @@ export default function SchemaCellInner({
         {is3D ? (
           <>
             <div className="stall-awning" aria-hidden />
+            <div className="stall-base-3d" aria-hidden />
             {vendor ? <div className="stall-products" aria-hidden /> : null}
           </>
         ) : (
@@ -35,6 +36,18 @@ export default function SchemaCellInner({
             <span className="s-vendor schema-cell-muted">{adminMode ? 'BOŞ' : '—'}</span>
           )}
         </div>
+      </div>
+    )
+  }
+
+  if (cell.type === 'tarti') {
+    return (
+      <div className={`tarti-visual ${is3D ? 'tarti-visual--3d' : ''}`}>
+        <div className="tarti-base" aria-hidden />
+        <div className="tarti-screen" aria-hidden>
+          <Icon name="scale" size={is3D ? 16 : iconSize} />
+        </div>
+        {!is3D && <span className="schema-cell-service__lbl">Tartı</span>}
       </div>
     )
   }
