@@ -1,4 +1,5 @@
 import { useState, useEffect, Component } from 'react'
+import { createPortal } from 'react-dom'
 import Icon from '../Icon.jsx'
 import SchemaViewport from '../../features/schema/components/SchemaViewport.jsx'
 import SchemaCellInner from '../SchemaCellInner.jsx'
@@ -38,6 +39,8 @@ function StallBottomSheet({
   userRole,
   onClose,
   onComplaint,
+  closing,
+  entered,
 }) {
   if (!selectedStall || !vendor) return null
 
@@ -55,7 +58,11 @@ function StallBottomSheet({
   }
 
   return (
-    <div className="bottom-sheet-overlay md-stall-overlay" onClick={onClose}>
+    <div
+      className={`bottom-sheet-overlay md-stall-overlay ${entered && !closing ? 'bottom-sheet-overlay--entered' : ''} ${closing ? 'bottom-sheet-overlay--closing' : ''}`}
+      onClick={onClose}
+      role="presentation"
+    >
       <div className="bottom-sheet md-stall-sheet" onClick={(e) => e.stopPropagation()}>
         <div className="bs-handle" />
         <div className="md-stall-sheet__head">
@@ -151,10 +158,41 @@ export default function MarketDetailSchemaModal({
 }) {
   const [serviceHint, setServiceHint] = useState(null)
   const [showMobileList, setShowMobileList] = useState(false)
+  const [stallSheetClosing, setStallSheetClosing] = useState(false)
+  const [stallSheetEntered, setStallSheetEntered] = useState(false)
 
   useEffect(() => {
     if (!open) setServiceHint(null)
   }, [open])
+
+  useEffect(() => {
+    if (selectedStall) setStallSheetClosing(false)
+  }, [selectedStall])
+
+  useEffect(() => {
+    if (!stallSheetClosing) return undefined
+    const t = window.setTimeout(() => {
+      onSelectStall(null)
+      setStallSheetClosing(false)
+    }, 460)
+    return () => window.clearTimeout(t)
+  }, [stallSheetClosing, onSelectStall])
+
+  useEffect(() => {
+    if (!selectedStall) {
+      setStallSheetEntered(false)
+      return
+    }
+    setStallSheetEntered(false)
+    let id2
+    const id = window.requestAnimationFrame(() => {
+      id2 = window.requestAnimationFrame(() => setStallSheetEntered(true))
+    })
+    return () => {
+      window.cancelAnimationFrame(id)
+      if (id2 != null) window.cancelAnimationFrame(id2)
+    }
+  }, [selectedStall])
 
   if (!open) return null
 
@@ -166,7 +204,7 @@ export default function MarketDetailSchemaModal({
   const vendor = selectedStall ? vendors.find((v) => v.id === selectedStall.vendorId) : null
   const stallPhoto = vendor ? getStallPhoto(vendor.id) : ''
 
-  return (
+  return createPortal(
     <div className="schema-fullscreen-overlay md-schema-fs">
       <SchemaErrorBoundary onClose={onClose}>
         <div className="schema-fs-header md-schema-fs__header">
@@ -251,10 +289,13 @@ export default function MarketDetailSchemaModal({
         selectedFilterProducts={selectedFilterProducts}
         onOpenProductCalc={onOpenProductCalc}
         userRole={userRole}
-        onClose={() => onSelectStall(null)}
+        closing={stallSheetClosing}
+        entered={stallSheetEntered}
+        onClose={() => setStallSheetClosing(true)}
         onComplaint={onComplaintFromStall}
       />
       </SchemaErrorBoundary>
-    </div>
+    </div>,
+    document.body
   )
 }
