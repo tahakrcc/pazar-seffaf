@@ -223,26 +223,85 @@ export function getVendorsForMarket(marketId) {
   }))
 }
 
-/** Yerel bütçe optimizasyonu (API yerine) */
-export function localAiOptimizeBudget(marketId, budget, productIds, quantities) {
-  const ids = Array.isArray(productIds) ? productIds : []
+/**
+ * Yerel bütçe önerisi: `marketIds` içinde her ürün için medyan fiyatı en düşük pazarı seçer.
+ * @param {number|number[]} marketIdsInput Tek pazar veya çoklu pazar kimlikleri
+ */
+export function localAiOptimizeBudget(marketIdsInput, budget, productIds, quantities) {
+  const raw = Array.isArray(marketIdsInput) ? marketIdsInput : [marketIdsInput]
+  const marketIds = [...new Set(raw.map(Number).filter((x) => Number.isFinite(x) && x > 0))]
+  const ids = Array.isArray(productIds) ? productIds.map(Number).filter((x) => Number.isFinite(x)) : []
   const qtyMap = quantities && typeof quantities === 'object' ? quantities : {}
-  const n = Math.max(1, ids.length)
-  const share = budget / n
+
+  if (marketIds.length === 0 || !Number.isFinite(budget) || budget <= 0) {
+    return {
+      marketIds,
+      marketName: '',
+      budget,
+      spent: 0,
+      remaining: 0,
+      items: [],
+      source: 'local-demo-invalid',
+    }
+  }
+
+  let spent = 0
+
   const items = ids.map((pid, idx) => {
     const p = products.find((x) => x.id === Number(pid))
     const q = Number(qtyMap[pid] ?? qtyMap[String(pid)] ?? 1) || 1
-    const unitEst = share / Math.max(q, 0.5)
+
+    let bestPrice = Infinity
+    let bestMarketId = marketIds[0]
+    let bestMarketName = ''
+    for (const mId of marketIds) {
+      const prices = getMarketPrices(mId)
+      const row = prices.find((pr) => Number(pr.id) === Number(pid))
+      if (row && row.medianPrice != null) {
+        const med = parseFloat(String(row.medianPrice).replace(',', '.'))
+        if (Number.isFinite(med) && med < bestPrice) {
+          bestPrice = med
+          bestMarketId = mId
+          bestMarketName = markets.find((m) => m.id === mId)?.name || `Pazar #${mId}`
+        }
+      }
+    }
+    if (!Number.isFinite(bestPrice)) bestPrice = 0
+
+    const unitPrice = Math.round(bestPrice * 100) / 100
+    const lineTotal = Math.round(unitPrice * q * 100) / 100
+    spent += lineTotal
+
     return {
       productId: Number(pid),
       productName: p?.name || `Ürün ${pid}`,
       quantity: q,
-      lineTotal: Math.round(share * 100) / 100,
-      unitEstimate: Math.round(unitEst * 100) / 100,
+      lineTotal,
+      unitEstimate: unitPrice,
+      unitPriceAtBestMarket: unitPrice,
+      suggestedMarketId: bestMarketId,
+      suggestedMarketName: bestMarketName,
       rank: idx + 1,
     }
   })
-  return { marketId, budget, items, source: 'local-demo' }
+
+  const spentRounded = Math.round(spent * 100) / 100
+  const remaining = Math.round((budget - spentRounded) * 100) / 100
+
+  const multi = marketIds.length > 1
+  const marketName = multi
+    ? `${marketIds.length} pazarda en ucuz (ürün başına)`
+    : markets.find((m) => m.id === marketIds[0])?.name || `Pazar #${marketIds[0]}`
+
+  return {
+    marketIds,
+    marketName,
+    budget,
+    spent: spentRounded,
+    remaining,
+    items,
+    source: 'local-demo-multi-cheapest',
+  }
 }
 
 /** Şikâyet gönderimi — sunucu yok, başarı döner */

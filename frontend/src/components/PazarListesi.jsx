@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect } from 'react'
 import { products as defaultProducts, markets as defaultMarkets, getMarketPrices, vendors } from '../data/markets'
 import { localAiOptimizeBudget } from '../data/offlineDataset.js'
 import { exportShoppingListImage } from '../utils/listExport'
@@ -31,11 +31,14 @@ export default function PazarListesi({
   const [collapsed, setCollapsed] = useState(false)
 
   const [budgetInput, setBudgetInput] = useState('')
-  const [aiMarketId, setAiMarketId] = useState(null)
+  /** Bütçe önerisinde dikkate alınacak pazarlar (çoğul); seçilenler arasında ürün başına en ucuz medyan */
+  const [aiMarketIds, setAiMarketIds] = useState([])
   const [aiLoading, setAiLoading] = useState(false)
   const [aiResult, setAiResult] = useState(null)
   const [aiError, setAiError] = useState(null)
   const [budgetDraftItems, setBudgetDraftItems] = useState([])
+  /** Bütçe sekmesinde pazar çoklu seçimi — tek satırda tıklayınca panel açılır */
+  const [budgetMarketsOpen, setBudgetMarketsOpen] = useState(false)
 
   const [exporting, setExporting] = useState(false)
   const [expandedVendorItem, setExpandedVendorItem] = useState(null)
@@ -87,6 +90,19 @@ export default function PazarListesi({
 
   const cheapestMarket = cityMarkets[0]
 
+  const cityMarketIdsKey = useMemo(
+    () =>
+      cityMarkets
+        .map((m) => m.id)
+        .sort((a, b) => a - b)
+        .join(','),
+    [cityMarkets],
+  )
+
+  useEffect(() => {
+    setAiMarketIds(cityMarkets.map((m) => m.id))
+  }, [cityMarketIdsKey])
+
   const toggleItem = (product, subtype) => {
     const key = `${product.id}-${subtype || 'default'}`
     const existing = selectedItems.find((i) => i.key === key)
@@ -131,6 +147,35 @@ export default function PazarListesi({
 
   const productIds = useMemo(() => [...new Set(selectedItems.map((i) => i.productId))], [selectedItems])
 
+  /** Bütçe sekmesinde: birim fiyat × miktar (kg); miktar veya bütçe değişince güncellenir */
+  const budgetMarketSummary = useMemo(() => {
+    const n = aiMarketIds.length
+    const total = cityMarkets.length
+    if (total === 0) return 'Bu şehirde pazar yok'
+    if (n === 0) return 'Hiçbiri seçili değil — dokun ve seç'
+    if (n === total) return `Tümü seçili (${n} pazar)`
+    const names = cityMarkets.filter((m) => aiMarketIds.includes(m.id)).map((m) => m.name)
+    if (names.length <= 2) return names.join(' · ')
+    return `${names.slice(0, 2).join(' · ')} · +${names.length - 2}`
+  }, [aiMarketIds, cityMarkets])
+
+  const budgetLiveTotals = useMemo(() => {
+    const cap = parseFloat(String(budgetInput).replace(',', '.'))
+    let spent = 0
+    for (const row of budgetDraftItems) {
+      if (!row.keep) continue
+      const u = row.unitAtMarket
+      const q = Number(row.qty)
+      if (u != null && Number.isFinite(u) && Number.isFinite(q) && q > 0) {
+        spent += u * q
+      }
+    }
+    spent = Math.round(spent * 100) / 100
+    const remaining =
+      Number.isFinite(cap) && cap >= 0 ? Math.round((cap - spent) * 100) / 100 : null
+    return { spent, remaining }
+  }, [budgetDraftItems, budgetInput])
+
   const filteredSelectedForCompare = useMemo(() => {
     if (!listFilter.trim()) return selectedItems
     const q = listFilter.toLowerCase()
@@ -142,9 +187,9 @@ export default function PazarListesi({
   }, [selectedItems, listFilter])
 
   const runAiOptimize = useCallback(async () => {
-    const mid = aiMarketId || schemaMarketId || cityMarkets[0]?.id
-    if (!mid) {
-      setAiError('Önce bir pazar seçin veya listede şehir pazarı bulunduğundan emin olun.')
+    const mids = aiMarketIds.filter((id) => cityMarkets.some((m) => m.id === id))
+    if (!mids.length) {
+      setAiError('Bütçe için en az bir pazar işaretleyin.')
       return
     }
     const budget = parseFloat(String(budgetInput).replace(',', '.'))
@@ -160,7 +205,11 @@ export default function PazarListesi({
     setAiError(null)
     setAiResult(null)
     try {
-      const res = localAiOptimizeBudget(mid, budget, productIds, quantitiesMap)
+      const qtyBudgetOne = {}
+      productIds.forEach((pid) => {
+        qtyBudgetOne[String(pid)] = 1
+      })
+      const res = localAiOptimizeBudget(mids, budget, productIds, qtyBudgetOne)
       setAiResult(res && typeof res === 'object' ? res : null)
       const lines = Array.isArray(res?.items) ? res.items : []
       const nextDraft = lines.map((row, idx) => {
@@ -172,9 +221,12 @@ export default function PazarListesi({
           productId: pid || null,
           name: row.productName || catalogRow?.name || `Ürün ${idx + 1}`,
           unit: catalogRow?.unit || existing?.unit || 'ad',
-          qty: Number(row.quantity || existing?.qty || 1),
+          qty: Math.max(0.5, Number(row.quantity ?? existing?.qty ?? 1) || 1),
           keep: true,
           lineTotal: row.lineTotal != null ? Number(row.lineTotal) : null,
+          cheapestMarketName: row.suggestedMarketName || '',
+          unitAtMarket:
+            row.unitPriceAtBestMarket != null ? Number(row.unitPriceAtBestMarket) : null,
         }
       })
       setBudgetDraftItems(nextDraft)
@@ -183,7 +235,7 @@ export default function PazarListesi({
     } finally {
       setAiLoading(false)
     }
-  }, [aiMarketId, schemaMarketId, cityMarkets, budgetInput, productIds, quantitiesMap, products, selectedItems])
+  }, [aiMarketIds, cityMarkets, budgetInput, productIds, products, selectedItems])
 
   const applyBudgetDraft = useCallback(() => {
     const approved = budgetDraftItems.filter((x) => x.keep && x.productId != null)
@@ -597,23 +649,70 @@ export default function PazarListesi({
             {(step === 'budget' && !miniMode) && (
               <div>
                 <div className="pl-section-label">Bütçeye uygun ürünler</div>
-                <p className="pl-hint">Öneriyi getir, ürünleri düzenle ve onayla. Onaylananlar ana listen olur.</p>
-                <div className="pl-ai-grid">
-                  <label className="pl-field">
-                    <span className="pl-field-label">Pazar</span>
-                    <select
-                      value={aiMarketId || ''}
-                      onChange={(e) => setAiMarketId(Number(e.target.value) || null)}
-                      className="pazar-listesi-select"
+                <p className="pl-hint">
+                  Öneri her ürün için <strong>1 kg</strong> ile başlar; tutar en ucuz pazardaki birim fiyat × miktar.
+                  Kilo veya bütçeyi değiştirince <strong>Harcanan / Kalan</strong> anında güncellenir.
+                </p>
+                <div className="pl-ai-grid pl-ai-grid--markets">
+                  <div className="pl-field pl-field--market-picks">
+                    <span className="pl-field-label">Pazarlar (seçilenlerde ürün başına en ucuz)</span>
+                    <button
+                      type="button"
+                      className="pl-market-picks-trigger"
+                      aria-expanded={budgetMarketsOpen}
+                      aria-controls="budget-market-picks-panel"
+                      id="budget-market-picks-trigger"
+                      onClick={() => setBudgetMarketsOpen((o) => !o)}
                     >
-                      <option value="">Varsayılan (şema pazarı veya ilk sıra)</option>
-                      {cityMarkets.map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {m.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                      <span className="pl-market-picks-trigger-text">
+                        <span className="pl-market-picks-trigger-title">Seçili pazarlar</span>
+                        <span className="pl-market-picks-trigger-summary">{budgetMarketSummary}</span>
+                      </span>
+                      <Icon
+                        name="expand_more"
+                        size={22}
+                        className={`pl-market-picks-chevron${budgetMarketsOpen ? ' pl-market-picks-chevron--open' : ''}`}
+                      />
+                    </button>
+                    <div
+                      id="budget-market-picks-panel"
+                      role="region"
+                      aria-labelledby="budget-market-picks-trigger"
+                      hidden={!budgetMarketsOpen}
+                      className="pl-market-picks-panel"
+                    >
+                      <div className="pl-market-picks-toolbar">
+                        <button
+                          type="button"
+                          className="pl-market-picks-btn"
+                          onClick={() => setAiMarketIds(cityMarkets.map((m) => m.id))}
+                        >
+                          Tümünü seç
+                        </button>
+                        <button type="button" className="pl-market-picks-btn" onClick={() => setAiMarketIds([])}>
+                          Temizle
+                        </button>
+                      </div>
+                      <div className="pl-market-picks" role="group">
+                        {cityMarkets.map((m) => (
+                          <label key={m.id} className="pl-market-pick">
+                            <input
+                              type="checkbox"
+                              checked={aiMarketIds.includes(m.id)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setAiMarketIds((prev) => [...new Set([...prev, m.id])])
+                                } else {
+                                  setAiMarketIds((prev) => prev.filter((id) => id !== m.id))
+                                }
+                              }}
+                            />
+                            <span>{m.name}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
                   <label className="pl-field">
                     <span className="pl-field-label">Bütçe (₺)</span>
                     <input
@@ -633,18 +732,39 @@ export default function PazarListesi({
                 {aiError && <p className="pl-error">{aiError}</p>}
                 {aiResult && (
                   <div className="pl-ai-result">
-                    <div className="pl-ai-head">
+                    <div
+                      className={`pl-ai-head${budgetLiveTotals.remaining != null && budgetLiveTotals.remaining < 0 ? ' pl-ai-head--over' : ''}`}
+                    >
                       <strong>{aiResult.marketName || 'Pazar'}</strong>
                       <span>
-                        Harcanan: ₺{aiResult.spent != null ? String(aiResult.spent) : '—'} · Kalan: ₺
-                        {aiResult.remaining != null ? String(aiResult.remaining) : '—'}
+                        Harcanan: ₺
+                        {budgetDraftItems.length > 0
+                          ? budgetLiveTotals.spent.toFixed(2)
+                          : aiResult.spent != null
+                            ? String(aiResult.spent)
+                            : '—'}{' '}
+                        · Kalan: ₺
+                        {budgetDraftItems.length > 0
+                          ? budgetLiveTotals.remaining != null
+                            ? budgetLiveTotals.remaining.toFixed(2)
+                            : '—'
+                          : aiResult.remaining != null
+                            ? String(aiResult.remaining)
+                            : '—'}
                       </span>
                     </div>
                     {budgetDraftItems.length === 0 ? (
                       <p className="pl-hint">Bu bütçe için öneri bulunamadı.</p>
                     ) : (
                       <ul className="pl-lines">
-                        {budgetDraftItems.map((row) => (
+                        {budgetDraftItems.map((row) => {
+                          const u = row.unitAtMarket
+                          const q = Number(row.qty) || 0
+                          const lineCost =
+                            u != null && Number.isFinite(u) && q > 0
+                              ? Math.round(u * q * 100) / 100
+                              : null
+                          return (
                           <li key={row.id} className="pl-line">
                             <input
                               type="checkbox"
@@ -653,7 +773,27 @@ export default function PazarListesi({
                             />
                             <div className="pl-line-main">
                               <div className="pl-line-name">{row.name}</div>
-                              <div className="pl-line-unit">{row.lineTotal != null ? `Öneri satır toplamı: ₺${row.lineTotal.toFixed(2)}` : ''}</div>
+                              <div className="pl-line-unit">
+                                {lineCost != null ? (
+                                  <>
+                                    Tahmini:{' '}
+                                    <strong>₺{lineCost.toFixed(2)}</strong>
+                                    {u != null ? (
+                                      <>
+                                        {' '}
+                                        (₺{u.toFixed(2)}/{row.unit === 'kg' ? 'kg' : 'birim'} × {q}{' '}
+                                        {row.unit === 'kg' ? 'kg' : 'ad'})
+                                      </>
+                                    ) : null}
+                                  </>
+                                ) : null}
+                                {row.cheapestMarketName ? (
+                                  <>
+                                    {' · '}
+                                    <span className="pl-line-best">En ucuz pazar: {row.cheapestMarketName}</span>
+                                  </>
+                                ) : null}
+                              </div>
                             </div>
                             <input
                               type="number"
@@ -661,11 +801,20 @@ export default function PazarListesi({
                               value={row.qty}
                               min="0.5"
                               step="0.5"
-                              onChange={(e) => setBudgetDraftItems((prev) => prev.map((x) => (x.id === row.id ? { ...x, qty: Number(e.target.value) || 1 } : x)))}
+                              onChange={(e) =>
+                                setBudgetDraftItems((prev) =>
+                                  prev.map((x) =>
+                                    x.id === row.id
+                                      ? { ...x, qty: Math.max(0.5, Number(e.target.value) || 1) }
+                                      : x,
+                                  ),
+                                )
+                              }
                             />
                             <span className="pl-unit">{row.unit === 'kg' ? 'kg' : 'ad'}</span>
                           </li>
-                        ))}
+                          )
+                        })}
                       </ul>
                     )}
                     <button type="button" className="btn-pl-primary" onClick={applyBudgetDraft} disabled={!budgetDraftItems.some((x) => x.keep)}>

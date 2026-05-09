@@ -215,6 +215,16 @@ function clampScale(val) {
   return Math.max(MIN_SCALE, Math.min(MAX_SCALE, val))
 }
 
+function touchDistance(t0, t1) {
+  const dx = t0.clientX - t1.clientX
+  const dy = t0.clientY - t1.clientY
+  return Math.sqrt(dx * dx + dy * dy)
+}
+
+function touchMidpoint(t0, t1) {
+  return { x: (t0.clientX + t1.clientX) / 2, y: (t0.clientY + t1.clientY) / 2 }
+}
+
 /* ─── Ana 2D Sahne ─── */
 export default function Schema2DScene({
   layout,
@@ -233,16 +243,29 @@ export default function Schema2DScene({
   const cw = layout.width
   const ch = layout.height
 
-  // Başlangıç ölçeğini hesapla — kanvas container'a sığsın
+  // Başlangıç ölçeğini hesapla — kanvas container'a sığsın (dar ekranda daha az boşluk)
   const initScale = useMemo(() => {
-    const pad = 48
+    const narrow = containerW < 520
+    const pad = narrow ? 20 : 48
     const sx = (containerW - pad) / cw
     const sy = (containerH - pad) / ch
-    return clampScale(Math.min(sx, sy, 1.5))
+    const fit = Math.min(sx, sy)
+    // Telefonda tam sığdır; masaüstünde çok fazla yakınlaştırma
+    const cap = narrow ? 2.2 : 1.5
+    return clampScale(Math.min(fit, cap))
   }, [containerW, containerH, cw, ch])
 
   const [scale, setScale] = useState(initScale)
   const [pos, setPos] = useState({ x: 0, y: 0 })
+
+  const scaleRef = useRef(scale)
+  const posRef = useRef(pos)
+  useEffect(() => {
+    scaleRef.current = scale
+    posRef.current = pos
+  }, [scale, pos])
+
+  const pinchDistRef = useRef(null)
 
   // Yeni layout geldiğinde ölçeği sıfırla ve ortala
   useEffect(() => {
@@ -253,6 +276,67 @@ export default function Schema2DScene({
       y: (containerH - ch * s) / 2,
     })
   }, [initScale, containerW, containerH, cw, ch])
+
+  // İki parmak pinch-zoom (mobilde tekerlek yok)
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return undefined
+
+    const onTouchStart = (evt) => {
+      if (evt.touches.length === 2) {
+        pinchDistRef.current = touchDistance(evt.touches[0], evt.touches[1])
+      }
+    }
+
+    const onTouchMove = (evt) => {
+      if (evt.touches.length !== 2) return
+      const d = touchDistance(evt.touches[0], evt.touches[1])
+      if (pinchDistRef.current == null) {
+        pinchDistRef.current = d
+        return
+      }
+      evt.preventDefault()
+      evt.stopPropagation()
+      const factor = d / pinchDistRef.current
+      pinchDistRef.current = d
+
+      const rect = el.getBoundingClientRect()
+      const mid = touchMidpoint(evt.touches[0], evt.touches[1])
+      const pointer = { x: mid.x - rect.left, y: mid.y - rect.top }
+
+      const oldScale = scaleRef.current
+      const oldPos = posRef.current
+      const newScale = clampScale(oldScale * factor)
+      const mousePointTo = {
+        x: (pointer.x - oldPos.x) / oldScale,
+        y: (pointer.y - oldPos.y) / oldScale,
+      }
+      const newPos = {
+        x: pointer.x - mousePointTo.x * newScale,
+        y: pointer.y - mousePointTo.y * newScale,
+      }
+      scaleRef.current = newScale
+      posRef.current = newPos
+      setScale(newScale)
+      setPos(newPos)
+    }
+
+    const onTouchEnd = (evt) => {
+      if (evt.touches.length < 2) pinchDistRef.current = null
+    }
+
+    el.addEventListener('touchstart', onTouchStart, { passive: true, capture: true })
+    el.addEventListener('touchmove', onTouchMove, { passive: false, capture: true })
+    el.addEventListener('touchend', onTouchEnd, { capture: true })
+    el.addEventListener('touchcancel', onTouchEnd, { capture: true })
+
+    return () => {
+      el.removeEventListener('touchstart', onTouchStart, { capture: true })
+      el.removeEventListener('touchmove', onTouchMove, { capture: true })
+      el.removeEventListener('touchend', onTouchEnd, { capture: true })
+      el.removeEventListener('touchcancel', onTouchEnd, { capture: true })
+    }
+  }, [])
 
   const walls = useMemo(() => layout.nodes.filter((n) => n.kind === 'wall'), [layout.nodes])
   const boxes = useMemo(() => layout.nodes.filter((n) => n.kind !== 'wall'), [layout.nodes])
