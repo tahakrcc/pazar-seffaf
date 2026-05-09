@@ -319,7 +319,7 @@ export default function Dashboard({ user, darkMode, setDarkMode }) {
           <>
             <div className="stats-grid">
               {[
-                { val: markets.length, label: 'Toplam Pazar', change: 'API', dir: 'up', gradient: 'linear-gradient(135deg,#33a1c9,#0891b2)' },
+                { val: markets.length, label: 'Toplam Pazar', change: 'API', dir: 'up', gradient: 'linear-gradient(135deg,#00a651,#007a3d)' },
                 { val: vendors.length, label: 'Kayıtlı Esnaf', change: 'API', dir: 'up', gradient: 'linear-gradient(135deg,#10b981,#0ea5e9)' },
                 { val: 0, label: 'Aktif kullanıcı', change: 'Yakında', dir: 'up', gradient: 'linear-gradient(135deg,#f59e0b,#ef4444)' },
                 { val: openComplaints, label: 'Açık Şikâyet', change: 'API', dir: 'down', gradient: 'linear-gradient(135deg,#64748b,#475569)' },
