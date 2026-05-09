@@ -243,10 +243,6 @@ export default function App() {
               <Icon name="my_location" size={20} aria-hidden />
               Konumuma göre seç
             </button>
-            <p className="welcome-settings-hint">
-              İlinizi sonra değiştirmek için ana ekrandan <strong>Ayarlar</strong> menüsünü kullanabilirsiniz. Orada{' '}
-              <strong>Basit mod</strong> (büyük yazı ve düğmeler) da vardır.
-            </p>
           </div>
         </main>
       </div>
