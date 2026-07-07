@@ -1,10 +1,11 @@
-import { useState, useEffect, Component } from 'react'
+import { useState, useEffect, useMemo, Component } from 'react'
 import { createPortal } from 'react-dom'
 import Icon from '../Icon.jsx'
 import SchemaViewport from '../../features/schema/components/SchemaViewport.jsx'
 import SchemaCellInner from '../SchemaCellInner.jsx'
 import { getProductIconName } from '../../utils/productIcon.js'
 import PazarListesi from '../PazarListesi.jsx'
+import { getProductListColor } from '../../utils/productListColors.js'
 class SchemaErrorBoundary extends Component {
   constructor(props) {
     super(props)
@@ -85,8 +86,17 @@ function StallBottomSheet({
               <div
                 key={p.id}
                 className={`md-stall-product ${filtered ? 'md-stall-product--hit' : ''}`}
+                style={filtered ? { borderColor: getProductListColor(p.id) } : undefined}
               >
                 <div className="md-stall-product__main">
+                  {filtered ? (
+                    <span
+                      className="md-stall-product__swatch"
+                      style={{ background: getProductListColor(p.id) }}
+                      title="Liste rengi"
+                      aria-hidden
+                    />
+                  ) : null}
                   <span className="product-abbr product-abbr--sm" aria-hidden>
                     <Icon name={getProductIconName(p)} size={20} />
                   </span>
@@ -165,6 +175,26 @@ export default function MarketDetailSchemaModal({
     if (!open) setServiceHint(null)
   }, [open])
 
+  /** Yerleşim filtresi + bu pazardaki alışveriş listesi satırları birlikte krokinde vurgulanır. */
+  const mergedFilterProducts = useMemo(() => {
+    const byId = new Map()
+    const add = (p) => {
+      if (p != null && p.id != null) byId.set(Number(p.id), p)
+    }
+    selectedFilterProducts.forEach(add)
+    if (shopList?.length) {
+      for (const item of shopList) {
+        const pid = Number(item.productId)
+        if (!Number.isFinite(pid) || byId.has(pid)) continue
+        const fromPrice = prices.find((pr) => Number(pr.id) === pid)
+        const fromCatalog = productsList.find((pr) => Number(pr.id) === pid)
+        const row = fromPrice || fromCatalog || null
+        if (row) add(row)
+      }
+    }
+    return [...byId.values()]
+  }, [selectedFilterProducts, shopList, prices, productsList])
+
   useEffect(() => {
     if (selectedStall) setStallSheetClosing(false)
   }, [selectedStall])
@@ -197,8 +227,8 @@ export default function MarketDetailSchemaModal({
   if (!open) return null
 
   const title =
-    selectedFilterProducts.length > 0
-      ? `${selectedFilterProducts.map((p) => p.name).join(', ')} Satanlar`
+    mergedFilterProducts.length > 0
+      ? `${mergedFilterProducts.map((p) => p.name).join(', ')} Satanlar`
       : 'Tüm Pazar Haritası'
 
   const vendor = selectedStall ? vendors.find((v) => v.id === selectedStall.vendorId) : null
@@ -247,7 +277,7 @@ export default function MarketDetailSchemaModal({
               layout={layout.canvas || layout}
               is3D={is3D}
               vendors={vendors}
-              selectedFilterProducts={selectedFilterProducts}
+              selectedFilterProducts={mergedFilterProducts}
               selectedStall={selectedStall}
               onSelectStall={onSelectStall}
               mergedSchemaTools={mergedSchemaTools}
@@ -286,7 +316,7 @@ export default function MarketDetailSchemaModal({
         stallPhoto={stallPhoto}
         productsList={productsList}
         prices={prices}
-        selectedFilterProducts={selectedFilterProducts}
+        selectedFilterProducts={mergedFilterProducts}
         onOpenProductCalc={onOpenProductCalc}
         userRole={userRole}
         closing={stallSheetClosing}

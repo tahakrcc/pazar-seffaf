@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Stage, Layer, Rect, Line, Group, Text, Circle, Ring, RegularPolygon, Arrow } from 'react-konva'
-import { vendorForStall, stallHasFilterProduct } from '../model/layoutSelectors.js'
+import { vendorForStall, stallHasFilterProduct, stallMatchingProductIds } from '../model/layoutSelectors.js'
+import { buildProductColorMap, getProductListColor } from '../../../utils/productListColors.js'
 
 /* ─── Sabitler ─── */
 const FLOOR_COLOR = '#f0f4f8'
@@ -21,8 +22,16 @@ const ENTRANCE_FILL = '#d1fae5'
 const ENTRANCE_STROKE = '#059669'
 const EXIT_FILL = '#fee2e2'
 const EXIT_STROKE = '#dc2626'
-const FILTER_HIT_COLOR = '#10b981'
-const FILTER_GLOW_COLOR = 'rgba(16,185,129,0.35)'
+const FILTER_HIT_FALLBACK = '#10b981'
+
+function hexToRgba(hex, alpha) {
+  const h = String(hex || '').replace('#', '')
+  if (h.length !== 6) return `rgba(16,185,129,${alpha})`
+  const r = parseInt(h.slice(0, 2), 16)
+  const g = parseInt(h.slice(2, 4), 16)
+  const b = parseInt(h.slice(4, 6), 16)
+  return `rgba(${r},${g},${b},${alpha})`
+}
 const MIN_SCALE = 0.3
 const MAX_SCALE = 5
 const LABEL_FONT = 'Inter, system-ui, sans-serif'
@@ -83,7 +92,7 @@ function AwningStripes({ x, y, width, height }) {
 }
 
 /* ─── Tezgah ─── */
-function StallNode({ node, vendor, isActive, isDimmed, isFilterHit, onSelect }) {
+function StallNode({ node, vendor, isActive, isDimmed, filterColors = [], onSelect }) {
   const { x, y, w, h, rotation = 0, stallCode } = node
   const hasVendor = Boolean(vendor)
 
@@ -93,6 +102,9 @@ function StallNode({ node, vendor, isActive, isDimmed, isFilterHit, onSelect }) 
   const vendorColor = isActive ? 'rgba(255,255,255,0.75)' : '#64748b'
   const awningH = Math.max(6, h * 0.14)
   const opacity = isDimmed ? STALL_DIMMED_OPACITY : 1
+  const isFilterHit = filterColors.length > 0
+  const primaryFilter = filterColors[0] || FILTER_HIT_FALLBACK
+  const glowFill = hexToRgba(primaryFilter, 0.35)
 
   const handleClick = useCallback(() => {
     if (vendor) onSelect?.(isActive ? null : { ...node, vendorId: vendor.id })
@@ -112,8 +124,22 @@ function StallNode({ node, vendor, isActive, isDimmed, isFilterHit, onSelect }) 
       {/* Filtre halesi */}
       {isFilterHit && !isDimmed && (
         <>
-          <Rect x={-4} y={-4} width={w + 8} height={h + 8} fill={FILTER_GLOW_COLOR} cornerRadius={8} />
-          <Rect x={-2} y={-2} width={w + 4} height={h + 4} stroke={FILTER_HIT_COLOR} strokeWidth={2.5} cornerRadius={7} dash={[6, 3]} fill="transparent" />
+          <Rect x={-4} y={-4} width={w + 8} height={h + 8} fill={glowFill} cornerRadius={8} />
+          <Rect x={-2} y={-2} width={w + 4} height={h + 4} stroke={primaryFilter} strokeWidth={2.5} cornerRadius={7} dash={[6, 3]} fill="transparent" />
+          {filterColors.slice(1, 4).map((c, idx) => (
+            <Rect
+              key={c + idx}
+              x={-2 + (idx + 1) * 1.5}
+              y={-2 + (idx + 1) * 1.5}
+              width={w + 4 - (idx + 1) * 3}
+              height={h + 4 - (idx + 1) * 3}
+              stroke={c}
+              strokeWidth={1.2}
+              cornerRadius={6}
+              dash={[4, 4]}
+              fill="transparent"
+            />
+          ))}
         </>
       )}
       {/* Gölge */}
@@ -152,9 +178,25 @@ function StallNode({ node, vendor, isActive, isDimmed, isFilterHit, onSelect }) 
       )}
       {/* Filtre rozet */}
       {isFilterHit && !isDimmed && (
-        <Group x={w / 2} y={-12}>
-          <Circle radius={8} fill={FILTER_HIT_COLOR} shadowColor={FILTER_HIT_COLOR} shadowBlur={8} />
-          <Text x={-5} y={-5} text="✓" fontSize={10} fill="#fff" fontStyle="900" />
+        <Group x={w / 2} y={-14}>
+          {filterColors.slice(0, 6).map((c, i, arr) => {
+            const n = Math.min(arr.length, 6)
+            const gap = Math.min(14, w / Math.max(n, 1))
+            const startX = (-(n - 1) * gap) / 2
+            return (
+              <Circle
+                key={`${c}-${i}`}
+                x={startX + i * gap}
+                y={0}
+                radius={n > 3 ? 5 : 6}
+                fill={c}
+                stroke="#ffffff"
+                strokeWidth={1.5}
+                shadowColor={c}
+                shadowBlur={6}
+              />
+            )
+          })}
         </Group>
       )}
     </Group>
@@ -366,6 +408,8 @@ export default function Schema2DScene({
 
   const filterOn = Array.isArray(selectedFilterProducts) && selectedFilterProducts.length > 0
 
+  const productColorMap = useMemo(() => buildProductColorMap(selectedFilterProducts), [selectedFilterProducts])
+
   return (
     <div ref={containerRef} className="schema-konva-2d-container">
       <Stage
@@ -410,7 +454,8 @@ export default function Schema2DScene({
               const isActive = selectedStall && selectedStall.id === node.id
               const hasProduct = stallHasFilterProduct(cellVendor, selectedFilterProducts)
               const isDimmed = filterOn && !hasProduct
-              const isFilterHit = filterOn && hasProduct
+              const matchingIds = stallMatchingProductIds(cellVendor, selectedFilterProducts)
+              const filterColors = matchingIds.map((pid) => productColorMap.get(pid) || getProductListColor(pid))
               return (
                 <StallNode
                   key={node.id}
@@ -418,7 +463,7 @@ export default function Schema2DScene({
                   vendor={cellVendor}
                   isActive={isActive}
                   isDimmed={isDimmed}
-                  isFilterHit={isFilterHit}
+                  filterColors={filterOn ? filterColors : []}
                   onSelect={(payload) => {
                     if (payload) onSelectStall?.(payload)
                     else if (cellVendor) onSelectStall?.(null)

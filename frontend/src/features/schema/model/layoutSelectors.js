@@ -13,3 +13,10 @@ export function stallHasFilterProduct(vendor, selectedFilterProducts) {
   if (!vendor || !Array.isArray(vendor.products) || !Array.isArray(selectedFilterProducts)) return false
   return vendor.products.some((pid) => selectedFilterProducts.some((p) => Number(p.id) === Number(pid)))
 }
+
+/** Filtre listesindeki ürünlerden bu esnafın sattığı kimlikler (şema renklendirmesi için). */
+export function stallMatchingProductIds(vendor, selectedFilterProducts) {
+  if (!vendor || !Array.isArray(vendor.products) || !Array.isArray(selectedFilterProducts)) return []
+  const filterIds = new Set(selectedFilterProducts.map((p) => Number(p.id)))
+  return vendor.products.map(Number).filter((pid) => filterIds.has(pid))
+}

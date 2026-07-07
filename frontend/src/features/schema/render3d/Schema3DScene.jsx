@@ -2,7 +2,8 @@ import { Suspense, useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { Environment, OrbitControls, Billboard, Text as DreiText, Edges, RoundedBox } from '@react-three/drei'
 import * as THREE from 'three'
-import { vendorForStall, stallHasFilterProduct } from '../model/layoutSelectors.js'
+import { vendorForStall, stallHasFilterProduct, stallMatchingProductIds } from '../model/layoutSelectors.js'
+import { buildProductColorMap, getProductListColor } from '../../../utils/productListColors.js'
 
 /* ─── Sabitler ─── */
 const SCALE = 0.018
@@ -38,9 +39,9 @@ function FilterPulseRing({ radius, color, active }) {
 }
 
 /* ─── Filtre Pin ─── */
-function FilterPin({ y, color }) {
+function FilterPin({ y, color, xOffset = 0 }) {
   return (
-    <Billboard position={[0, y + 0.45, 0]} follow lockX={false} lockY={false} lockZ={false}>
+    <Billboard position={[xOffset, y + 0.45, 0]} follow lockX={false} lockY={false} lockZ={false}>
       <mesh>
         <sphereGeometry args={[0.065, 18, 18]} />
         <meshStandardMaterial color={color} emissive={color} emissiveIntensity={1.2} toneMapped={false} />
@@ -156,7 +157,7 @@ function Tarti({ node }) {
 }
 
 /* ─── Tezgah ─── */
-function Stall({ node, vendors, selectedFilterProducts, selectedStall, onSelectStall }) {
+function Stall({ node, vendors, selectedFilterProducts, selectedStall, onSelectStall, productColorMap }) {
   const w = Math.max(0.2, node.w * SCALE)
   const d = Math.max(0.2, node.h * SCALE)
   const cx = (node.x + node.w / 2) * SCALE
@@ -171,6 +172,13 @@ function Stall({ node, vendors, selectedFilterProducts, selectedStall, onSelectS
 
   const hasVendor = Boolean(cellVendor)
 
+  const filterColors = useMemo(() => {
+    if (!filterHit || !filterOn) return []
+    const ids = stallMatchingProductIds(cellVendor, selectedFilterProducts)
+    const map = productColorMap || new Map()
+    return ids.map((pid) => map.get(pid) || getProductListColor(pid))
+  }, [filterHit, filterOn, cellVendor, selectedFilterProducts, productColorMap])
+
   // Renkler
   const baseColor = useMemo(() => {
     if (stallDimmed) return new THREE.Color('#a0a0a0')
@@ -180,12 +188,16 @@ function Stall({ node, vendors, selectedFilterProducts, selectedStall, onSelectS
 
   const topColor = stallDimmed ? '#d8d8d8' : '#f5ebe0'
   const awningColor = stallDimmed ? '#e2e8f0' : hasVendor ? '#fcd34d' : '#fecaca'
-  const accent = filterHit ? new THREE.Color('#10b981') : stallSelected ? new THREE.Color('#0ea5e9') : null
+  const filterAccent =
+    filterHit && filterColors.length > 0 ? new THREE.Color(filterColors[0]) : filterHit ? new THREE.Color('#10b981') : null
+  const selectionAccent = stallSelected ? new THREE.Color('#0ea5e9') : null
+  const accent = filterAccent || selectionAccent
   const emissive = accent || new THREE.Color('#000000')
   const emissiveInt = stallDimmed ? 0 : filterHit ? 0.15 : stallSelected ? 0.1 : 0
 
   const scaleBoost = stallDimmed ? 0.9 : filterHit ? 1.06 : stallSelected ? 1.04 : 1
-  const showGlow = !!(filterHit || stallSelected) && accent
+  const showFilterGlow = filterHit && accent && filterAccent
+  const showSelectionGlow = stallSelected && selectionAccent && !filterHit
 
   return (
     <group
@@ -201,11 +213,22 @@ function Stall({ node, vendors, selectedFilterProducts, selectedStall, onSelectS
       onPointerOver={() => { document.body.style.cursor = 'pointer' }}
       onPointerOut={() => { document.body.style.cursor = 'default' }}
     >
-      {/* Filtre halesi */}
-      {showGlow && (
+      {/* Filtre halesi — ürün rengine göre */}
+      {showFilterGlow && (
         <>
-          <FilterPulseRing radius={Math.max(w, d) * 0.65} color={accent} active />
-          <FilterPin y={STALL_H} color={accent} />
+          <FilterPulseRing radius={Math.max(w, d) * 0.65} color={filterAccent} active />
+          {filterColors.slice(0, 5).map((col, i, arr) => {
+            const n = arr.length
+            const spread = Math.min(0.16, w * 0.35)
+            const xOff = n <= 1 ? 0 : (i - (Math.min(n, 5) - 1) / 2) * spread
+            return <FilterPin key={`${col}-${i}`} y={STALL_H} color={new THREE.Color(col)} xOffset={xOff} />
+          })}
+        </>
+      )}
+      {showSelectionGlow && (
+        <>
+          <FilterPulseRing radius={Math.max(w, d) * 0.65} color={selectionAccent} active />
+          <FilterPin y={STALL_H} color={selectionAccent} />
         </>
       )}
 
@@ -308,6 +331,7 @@ function LayoutScene({ layout, vendors, selectedFilterProducts, selectedStall, o
 
   const entrColor = useMemo(() => new THREE.Color('#10b981'), [])
   const exitColor = useMemo(() => new THREE.Color('#f97316'), [])
+  const productColorMap = useMemo(() => buildProductColorMap(selectedFilterProducts), [selectedFilterProducts])
 
   return (
     <group position={[-cx, 0, -cz]}>
@@ -353,6 +377,7 @@ function LayoutScene({ layout, vendors, selectedFilterProducts, selectedStall, o
             selectedFilterProducts={selectedFilterProducts}
             selectedStall={selectedStall}
             onSelectStall={onSelectStall}
+            productColorMap={productColorMap}
           />
         )
       })}

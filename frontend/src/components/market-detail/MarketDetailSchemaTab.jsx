@@ -1,5 +1,6 @@
 import Icon from '../Icon.jsx'
 import { getProductIconName } from '../../utils/productIcon.js'
+import { getProductListColor } from '../../utils/productListColors.js'
 
 export default function MarketDetailSchemaTab({
   productSearch,
@@ -49,7 +50,8 @@ export default function MarketDetailSchemaTab({
       {selectedFilterProducts.length > 0 && (
         <div className="filter-chips-container filter-chips-container--tight md-filter-chips">
           {selectedFilterProducts.map((p) => (
-            <div key={p.id} className="filter-chip active">
+            <div key={p.id} className="filter-chip active filter-chip--with-swatch">
+              <span className="pd-product-swatch" style={{ background: getProductListColor(p.id) }} aria-hidden />
               {p.name}
               <button
                 type="button"
@@ -91,6 +93,7 @@ export default function MarketDetailSchemaTab({
               }}
             >
               <div className="p-info">
+                <span className="pd-product-swatch" style={{ background: getProductListColor(p.id) }} aria-hidden />
                 <span className={`product-abbr ${isSelected ? 'is-on' : ''}`} aria-hidden>
                   <Icon name={getProductIconName(p)} size={22} />
                 </span>

@@ -3,6 +3,7 @@ import { products as defaultProducts, markets as defaultMarkets, getMarketPrices
 import { localAiOptimizeBudget } from '../data/offlineDataset.js'
 import { exportShoppingListImage } from '../utils/listExport'
 import { getProductIconName } from '../utils/productIcon.js'
+import { getProductListColor } from '../utils/productListColors.js'
 import Icon from './Icon.jsx'
 
 export default function PazarListesi({
@@ -517,6 +518,12 @@ export default function PazarListesi({
                             checked={item.checked}
                             onChange={() => toggleChecked(item.key)}
                             aria-label={`${item.name} alındı`}
+                          />
+                          <span
+                            className="pl-line-swatch"
+                            style={{ background: getProductListColor(item.productId) }}
+                            title="Kroki rengi"
+                            aria-hidden
                           />
                           <div className="pl-line-main" style={{ cursor: 'pointer' }} onClick={() => setExpandedVendorItem(isVendorListExpanded ? null : item.key)}>
                             <div className="pl-line-name">
